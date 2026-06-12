@@ -1,0 +1,2 @@
+-- movie_reset.sql — COMMENT 제거 + 데모 테이블/프로파일 쌍 정리 보조 (Cleanup API·PG-08 참조)
+-- 구현 담당: 증강 에이전트.

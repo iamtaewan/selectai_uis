@@ -1,0 +1,2 @@
+-- movie_comments.sql — COMMENT ON TABLE/COLUMN 증강 세트 (api-spec §7.3 원문 패턴, 작은따옴표 '' 이중화)
+-- 구현 담당: 증강 에이전트.

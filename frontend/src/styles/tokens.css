@@ -1,0 +1,167 @@
+/* tokens.css — style.md §2~§4 토큰의 단일 구현체 (Redwood 룩앤필).
+ * 스캐폴딩 공유 파일 — 값 변경은 style.md 개정과 함께만. 임의 색상 하드코딩 금지.
+ * Tailwind v4 CSS-first: 아래 @theme 매핑으로 bg-paper, text-ink 등 유틸리티 생성.
+ */
+@import "tailwindcss";
+
+:root {
+  /* ===== 브랜드 ===== */
+  --color-brand:            #C74634;  /* Redwood Red — 헤더 액센트, 로고, 포커스 포인트 */
+  --color-brand-dark:       #A33A2B;  /* 브랜드 hover/액티브 */
+  --color-brand-tint:       #FBEDEA;  /* 브랜드 연한 배경 (배너, 선택 강조) */
+
+  /* ===== 뉴트럴 (웜 그레이 스케일 — Redwood의 핵심 질감) ===== */
+  --color-neutral-0:        #FFFFFF;
+  --color-neutral-10:       #FBF9F8;  /* 앱 기본 배경 (warm paper) */
+  --color-neutral-20:       #F5F4F2;  /* 패널/사이드바 배경 */
+  --color-neutral-30:       #E4E1DD;  /* 보더 기본 */
+  --color-neutral-40:       #D4D0CB;  /* 보더 강조, 비활성 컨트롤 */
+  --color-neutral-50:       #ABA7A2;  /* 비활성 텍스트, 플레이스홀더 */
+  --color-neutral-60:       #7A756F;  /* 보조 텍스트 (해설, 캡션) */
+  --color-neutral-70:       #4F4A45;  /* 서브 헤딩 */
+  --color-neutral-80:       #312D2A;  /* 다크 패널 배경 (코드 블록, 앱 헤더) */
+  --color-neutral-90:       #161513;  /* 본문 텍스트 (잉크) */
+
+  /* ===== 상태 컬러 ===== */
+  --color-success:          #2E7D32;  /* 통과/연결 성공 */
+  --color-success-tint:     #E8F3E8;
+  --color-warning:          #B7790A;  /* 주의 (deprecated 모델, P1 미점검) */
+  --color-warning-tint:     #FCF0DC;
+  --color-danger:           #C7402E;  /* 오류/삭제 (브랜드 레드와 동족 톤) */
+  --color-danger-tint:      #FBEDEA;
+  --color-info:             #1F6FB5;  /* 정보/해설/근거 페이지 */
+  --color-info-tint:        #E6F0F8;
+  --color-running:          #6B4FA0;  /* 실행 중 (LLM 호출 대기) */
+  --color-running-tint:     #EFEAF7;
+
+  /* ===== 인터랙션 ===== */
+  --color-action-primary:        var(--color-neutral-90); /* primary 버튼 배경 = 잉크 */
+  --color-action-primary-hover:  #2C2A27;
+  --color-focus-ring:            #1F6FB5;                 /* 포커스 아웃라인 (접근성) */
+  --color-link:                  #1F6FB5;
+  --color-overlay:               rgba(22, 21, 19, 0.4);   /* 모달 딤 */
+
+  /* ===== 코드/SQL 블록 (다크 패널 — 라이트 UI 속 유일한 다크 영역) ===== */
+  --color-code-bg:          #25221F;
+  --color-code-text:        #F5F4F2;
+  --color-code-keyword:     #F0A878;  /* SQL 키워드 (SELECT, BEGIN …) */
+  --color-code-string:      #A8C9A0;  /* 문자열 리터럴 */
+  --color-code-comment:     #8A857F;
+  --color-code-accent:      #E89A8C;  /* 함수명 (DBMS_CLOUD_AI.GENERATE) */
+
+  /* ===== 폰트 (style.md §3.1 — Oracle Sans 대체 스택) ===== */
+  --font-sans: "Inter", "Pretendard", "Noto Sans KR",
+               -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "D2Coding",
+               Consolas, "Courier New", monospace;
+
+  /* ===== 타이포 스케일 (§3.2) ===== */
+  --text-xs:    0.75rem;   /* 12px — 배지, 근거 페이지 표기, 캡션 */
+  --text-sm:    0.8125rem; /* 13px — 보조 해설, 테이블 셀 보조 */
+  --text-base:  0.875rem;  /* 14px — 본문, 폼, 테이블 기본 */
+  --text-md:    1rem;      /* 16px — 챗 버블, 강조 본문 */
+  --text-lg:    1.125rem;  /* 18px — 카드/패널 제목 */
+  --text-xl:    1.375rem;  /* 22px — 섹션 헤더 */
+  --text-2xl:   1.75rem;   /* 28px — 페이지 타이틀 */
+
+  --weight-regular:  400;
+  --weight-medium:   500;  /* 라벨, 탭, 테이블 헤더 */
+  --weight-semibold: 600;  /* 패널 제목, 버튼 */
+  --weight-bold:     700;  /* 페이지 타이틀, 핵심 수치 */
+
+  --leading-tight:  1.3;   /* 헤딩 */
+  --leading-normal: 1.55;  /* 본문/해설 */
+  --leading-code:   1.6;   /* 코드 블록 */
+
+  /* ===== 스페이싱 (4px 베이스, §4.2) ===== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* ===== 라운딩 — Redwood는 과한 라운딩을 쓰지 않음 (최대 8px) ===== */
+  --radius-sm:   4px;   /* 입력 필드, 배지, 코드 인라인 */
+  --radius-md:   6px;   /* 버튼, 탭 */
+  --radius-lg:   8px;   /* 카드, 패널, 모달 */
+  --radius-full: 999px; /* 칩, 아바타, 신호등 점 */
+
+  /* ===== 그림자 — 은은하게, 웜 잉크 기반 ===== */
+  --shadow-sm: 0 1px 2px rgba(22, 21, 19, 0.06);
+  --shadow-md: 0 2px 8px rgba(22, 21, 19, 0.10);   /* 카드 hover, 드롭다운 */
+  --shadow-lg: 0 8px 24px rgba(22, 21, 19, 0.16);  /* 모달, 토스트 */
+
+  /* ===== 보더 ===== */
+  --border-default: 1px solid var(--color-neutral-30);
+  --border-strong:  1px solid var(--color-neutral-40);
+}
+
+/* Tailwind v4 테마 매핑 — 유틸리티 클래스로 토큰 노출.
+ * 예: bg-paper, text-ink, bg-brand, border-line, font-mono, text-code-keyword */
+@theme {
+  /* 브랜드/시맨틱 별칭 */
+  --color-brand: #C74634;
+  --color-brand-dark: #A33A2B;
+  --color-brand-tint: #FBEDEA;
+  --color-ink: #161513;
+  --color-paper: #FBF9F8;
+  --color-panel: #F5F4F2;
+  --color-line: #E4E1DD;
+  --color-line-strong: #D4D0CB;
+  --color-muted: #7A756F;
+  --color-subtle: #ABA7A2;
+  --color-subhead: #4F4A45;
+  --color-dark-panel: #312D2A;
+
+  /* 상태 */
+  --color-success: #2E7D32;
+  --color-success-tint: #E8F3E8;
+  --color-warning: #B7790A;
+  --color-warning-tint: #FCF0DC;
+  --color-danger: #C7402E;
+  --color-danger-tint: #FBEDEA;
+  --color-info: #1F6FB5;
+  --color-info-tint: #E6F0F8;
+  --color-running: #6B4FA0;
+  --color-running-tint: #EFEAF7;
+
+  /* 코드 패널 */
+  --color-code-bg: #25221F;
+  --color-code-text: #F5F4F2;
+  --color-code-keyword: #F0A878;
+  --color-code-string: #A8C9A0;
+  --color-code-comment: #8A857F;
+  --color-code-accent: #E89A8C;
+
+  /* 인터랙션 */
+  --color-action-primary: #161513;
+  --color-focus-ring: #1F6FB5;
+  --color-link: #1F6FB5;
+
+  /* 폰트 */
+  --font-sans: "Inter", "Pretendard", "Noto Sans KR", -apple-system, "Segoe UI",
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "D2Coding", Consolas, "Courier New", monospace;
+
+  /* 라운딩 */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}
+
+/* 전역 기본 — warm paper 배경 + 잉크 텍스트 (라이트 모드 단일, §6) */
+html {
+  background: var(--color-neutral-10);
+  color: var(--color-neutral-90);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: var(--leading-normal);
+}
+
+/* 표/지표 숫자 정렬감 (§3.1) */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}

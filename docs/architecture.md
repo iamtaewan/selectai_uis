@@ -106,10 +106,11 @@ selectai_uis/
 │   │   ├── config.py                    # 환경변수 (pydantic-settings)
 │   │   ├── routers/                     # HTTP 계층 — 입출력 스키마만, 로직 없음
 │   │   │   ├── connections.py           # /api/v1/connections, /api/v1/connections/wallet
-│   │   │   ├── prerequisites.py         # /api/v1/privileges (대상 커넥션은 X-Connection-Id 헤더)
-│   │   │   ├── profiles.py              # /api/v1/profiles, /api/v1/settings/default-profile
+│   │   │   ├── privileges.py            # /api/v1/privileges (대상 커넥션은 X-Connection-Id 헤더)
+│   │   │   ├── profiles.py              # /api/v1/profiles
+│   │   │   ├── settings.py              # /api/v1/settings/default-profile (앱 수준 기본 프로파일)
 │   │   │   ├── selectai.py              # /api/v1/selectai
-│   │   │   ├── conversations.py         # /api/v1/chat/conversations, /api/v1/chat/compare
+│   │   │   ├── chat.py                  # /api/v1/chat/conversations, /api/v1/chat/compare
 │   │   │   ├── enrichment.py            # /api/v1/enrichment
 │   │   │   ├── schema.py                # /api/v1/schema (대상 테이블 선택 — object_list 브라우저, FR-04)
 │   │   │   ├── dashboard.py             # /api/v1/dashboard

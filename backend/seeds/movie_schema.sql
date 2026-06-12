@@ -1,0 +1,2 @@
+-- movie_schema.sql — FR-08 모호 스키마(c1~c7) 테이블 + 시드 데이터 (selectai-reference.md §7 ch19 패턴)
+-- 구현 담당: 증강 에이전트. table1(c1,c2,c3)=movies / table2(c1,c6,c7)=watch history / table3(c1,c4,c5)=devices·users
