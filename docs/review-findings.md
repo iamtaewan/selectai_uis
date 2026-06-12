@@ -104,3 +104,28 @@
 - 액션 목록·FR ID·PG ID·컴파트먼트 OCID(7개 문서 10곳)·프로시저 패키지 소속·모호 스키마 구조(c1~c7) — 전 문서 정합
 - mermaid 다이어그램 6개 전부 렌더링 가능, Pydantic v2 문법 일관(v1 혼용 없음)
 - PDF 대조: 액션 표(p43-44), ENABLE_PRINCIPAL_AUTH(p81), ACL 불필요(p34), 모델 표(p15), Conversations(p42·47·125-132), feedback 권한(p64), DATA_ACCESS(p174-175), 프로파일 속성 20/21, CREATE_PROFILE 구문 — 전부 일치
+
+---
+
+## 반영 이력 (개발 착수 시)
+
+- **검토 시점**: 2026-06-12 (명세 정리 에이전트 1/8). 각 항목은 수정 전 grep/Read로 현재 상태 확인 후 잔여분만 반영.
+
+### 신규 수정한 항목
+
+| 항목 | 파일:변경요약 |
+|---|---|
+| M5 | architecture.md:456 — `SELECTAI_CALL_TIMEOUT_MS=120000`을 "GENERATE 계열 call_timeout 상한(120s)"으로 명시하고, 단계별 세분값(showsql 60s·권한 30s 등)은 api-spec §12.2 표를 따르며 상한을 넘지 않는다고 정렬 문구 추가. 양 문서 GENERATE 120s 기준 정합 |
+| M9 | api-spec.md:496-503 — model enum 값에서 `(deprecated)` 접미사 제거(순수 모델명 `cohere.command-r-16k`·`cohere.command-r-plus`). 별도 `"deprecated": [...]` 필드 추가 + description_ko에 "UI 비활성/경고 배지 표기, 전송 값은 순수 모델명" 명시 |
+| M11 | security.md:118,124 — 읽기 전용 게이트를 "LLM 생성 SQL 경로 비SELECT 자동 차단(수동 오버라이드 없음, 실행 버튼 비활성)"으로 강화. §3.4의 "최종 방어선" 모순 해소 — 인젝션이 확인 클릭을 유도해도 파괴적 SQL 미실행. 고정 템플릿 DDL 경로(§3.3)는 분리 유지 |
+| L(design ORA-12506) | design.md:240 — `ORA-12506 (게이트웨이 타임아웃)` 라벨을 `ORA-12506 (리스너 연결 거부)`로 정정. 조치 문구("ADB 중지 상태 확인")는 ORA-12506 의미와 부합하여 유지 |
+| L(PL/SQL 종결자) | api-spec.md:430-433 — data_access 익명 블록 2개(ENABLE/DISABLE)가 `/` 1개만 공유 → 각 블록에 `/` 부여(상호 배타 변형, enable 플래그로 택1) + 주석 명확화 |
+
+### 이미 수정되어 건너뛴 항목 (현재 상태 확인 완료)
+
+- **H1** — api-spec.md §6.2(:828-837): `params => :params_json` 단일 바인드 + "백엔드가 `json.dumps({"conversation_id": ...})`로 직렬화, SQL 문자열 연결 금지" 문구 이미 반영. 문자열 연결(`||`) 패턴 없음. (§11.2 :888 executed_sql 예시의 리터럴 JSON은 학습용 표시 표현이며 SQL 조립 패턴 아님)
+- **H2** — security.md:173: `allow dynamic-group <dynamic-group-name> to manage generative-ai-family in compartment TAEWAN.KIM` 이미 반영. `allow group ...` 잔존 없음
+- **M1** — style.md:257: feedback을 "결과 카드 👍/👎 버튼으로 통합, 탭은 showprompt만(P1 배지)"으로 이미 정정됨
+- **M2** — demo-scenarios.md:294 QA-05: 검사 범위 "액션 선택지/실행 경로에 부재 + PG-03b 학습 메모 정적 문구 예외"로 이미 한정됨
+- **M3** — api-spec.md:1615 / architecture.md:267·488: 풀 `min=0` 이미 통일됨
+- **M8** — api-spec.md §6.7(:878) "두 호출은 병렬 실행한다" + §12.2(:1629) "`asyncio.gather` 병렬" 이미 정합. 자기모순 없음

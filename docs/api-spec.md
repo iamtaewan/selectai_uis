@@ -427,8 +427,9 @@ BEGIN
 END;
 /
 
--- data_access
+-- data_access (enable 플래그에 따라 둘 중 하나만 실행)
 BEGIN DBMS_CLOUD_AI.ENABLE_DATA_ACCESS; END;   -- enable=true
+/
 BEGIN DBMS_CLOUD_AI.DISABLE_DATA_ACCESS; END;  -- enable=false (거버넌스 시연 P1)
 /
 
@@ -496,11 +497,12 @@ DB 미접속으로 동작하는 정적 메타데이터. **레퍼런스 §3에서
         "enum": ["meta.llama-3.3-70b-instruct", "meta.llama-3.2-90b-vision-instruct",
                  "meta.llama-3.2-11b-vision-instruct", "meta.llama-3.1-70b-instruct",
                  "meta.llama-3.1-405b-instruct", "cohere.command-r-08-2024",
-                 "cohere.command-r-plus-08-2024", "cohere.command-r-16k (deprecated)",
-                 "cohere.command-r-plus (deprecated)", "xai.grok-3", "xai.grok-3-fast",
+                 "cohere.command-r-plus-08-2024", "cohere.command-r-16k",
+                 "cohere.command-r-plus", "xai.grok-3", "xai.grok-3-fast",
                  "xai.grok-3-mini", "xai.grok-3-mini-fast", "xai.grok-4",
                  "xai.grok-4-fast-reasoning", "xai.grok-4-fast-non-reasoning"],
-        "description_ko": "LLM 모델명. 모델 OCID 지정 시 oci_apiformat이 필요합니다.",
+        "deprecated": ["cohere.command-r-16k", "cohere.command-r-plus"],
+        "description_ko": "LLM 모델명. 모델 OCID 지정 시 oci_apiformat이 필요합니다. `deprecated` 목록의 모델은 UI에서 비활성/경고 배지로 표기하되 전송 값은 순수 모델명을 사용합니다.",
         "docs_ref": "p15, p84, p91-92",
         "ui_group": "provider"
       }

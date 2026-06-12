@@ -89,7 +89,7 @@
 |---|---|---|
 | X1 | 암호화 마스터 키: `APP_SECRET_KEY` 우선, 미설정 시 `~/.selectai/secret.key` 자동 생성 + 경고(평문 폴백은 금지). 키-데이터 분리 불변 | security.md §2.1, architecture.md §3.3 |
 | X2 | 생성 리소스 대장은 P0 채택. `~/.selectai/resources.json` JSON 파일 ledger와 `GET /api/v1/resources`·`DELETE /api/v1/resources/{id}`·`POST /api/v1/resources/cleanup` CRUD, PG-08 "데모 환경 정리"를 명세화 (SQLite 미사용) | PRD, architecture, api-spec, design, security |
-| X3 | P0 데이터셋은 SH + 무비 모호 스키마만 사용. 한국형 `SALES_DEMO`는 P1 후보로 보류 | PRD, architecture, demo-scenarios |
+| X3 | **대상 테이블은 사용자가 선택한다(불변 원칙)** — 프로파일의 `object_list`는 인증한 커넥션 사용자가 DB에서 볼 수 있는(`ALL_*` 뷰) 테이블 중 PG-03a 브라우저로 고른 것으로 구성한다. 앱이 시드/검증해 제공하는 SH·무비 모호 스키마는 **데모 편의용 프리셋**일 뿐 대상 선택을 제한하지 않는다. 한국형 `SALES_DEMO` 프리셋은 검증 전까지 P1 보류 | PRD(FR-04), design(PG-03a), api-spec(§8), security(§4.2), demo-scenarios(§3) |
 | X4 | 단순/전문가 모드, SQL 투명 모드, 가이드 투어는 프런트 `localStorage` 저장. 백엔드는 기본 프로파일만 영속 | architecture, design |
 | X5 | Hugging Face는 P0 provider enum에서 제외. UI 선택지는 `oci/openai/azure/cohere/google/anthropic/aws`, 기타는 고급 JSON 입력으로 우회 | PRD, api-spec, selectai-reference |
 | X6 | 무비 증강 시드는 `backend/seeds/movie_schema.sql`, `movie_comments.sql`, `movie_reset.sql` 3파일 체계로 통일 | architecture, api-spec, demo-scenarios |

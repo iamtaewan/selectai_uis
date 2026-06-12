@@ -110,7 +110,8 @@ selectai_uis/
 │   │   │   ├── profiles.py              # /api/v1/profiles, /api/v1/settings/default-profile
 │   │   │   ├── selectai.py              # /api/v1/selectai
 │   │   │   ├── conversations.py         # /api/v1/chat/conversations, /api/v1/chat/compare
-│   │   │   ├── enrichment.py            # /api/v1/enrichment, /api/v1/schema
+│   │   │   ├── enrichment.py            # /api/v1/enrichment
+│   │   │   ├── schema.py                # /api/v1/schema (대상 테이블 선택 — object_list 브라우저, FR-04)
 │   │   │   ├── dashboard.py             # /api/v1/dashboard
 │   │   │   └── resources.py             # /api/v1/resources (생성 리소스 대장 CRUD/정리)
 │   │   ├── services/                    # 도메인 로직 — SQL 문자열 생성·검증·해설
@@ -121,6 +122,7 @@ selectai_uis/
 │   │   │   ├── conversation_service.py  # CREATE/UPDATE/DROP_CONVERSATION, 이력 뷰 조회
 │   │   │   ├── enrichment_service.py    # 모호 스키마 시드, COMMENT DDL, 전/후 프로파일 쌍
 │   │   │   ├── resource_service.py      # ledger(resources.json) CRUD, cleanup_sql 실행/파일 정리, 실패 격리
+│   │   │   ├── schema_service.py        # 인증 사용자 가시 스키마/테이블/컬럼 조회(ALL_* 뷰) — object_list 브라우저 지원
 │   │   │   └── attribute_catalog.py     # 검증 21개 속성의 한국어 해설·기본값·근거 페이지 (정적 카탈로그)
 │   │   ├── db/                          # 인프라 계층
 │   │   │   ├── pool_registry.py         # connection_id → oracledb.ConnectionPool 레지스트리
@@ -279,7 +281,7 @@ LLM 호출(GENERATE)이 DB 커넥션을 길게 점유하는 점이 이 아키텍
 - **암호화**: admin 비밀번호·wallet 비밀번호는 `cryptography` Fernet(AES-128-CBC+HMAC) 대칭 암호화. 키는 환경변수 `APP_SECRET_KEY`(없으면 최초 기동 시 `~/.selectai/secret.key` 자동 생성, 0600).
 - **wallet 파일**: 평문 zip은 즉시 삭제, 해제본은 `~/.selectai/wallets/{wallet_id}/` (0700)에 보관 — 업로드분과 자동 다운로드분(§3.1.1) 공통. 커넥션 삭제 시 디렉토리 제거(다른 커넥션이 참조하지 않을 때).
 - **로그 마스킹**: logging Filter로 `password`, `wallet_password`, `private_key` 키를 가진 값과 Fernet 토큰 패턴을 `***`로 치환. API 응답 스키마에는 비밀 필드 자체를 두지 않는다 (PRD R5).
-- 한계 명시: 키와 암호문이 같은 호스트에 있으므로 프로덕션급 보호가 아니다 — PRD 비목표(프로덕션 보안)와 일치하는 "최소선"이다. OCI Vault 연동은 P2 이후 검토.
+- 한계 명시: 키와 암호문이 같은 호스트에 있으므로 프로덕션급 보호가 아니다 — PRD 비목표(프로덕션 보안)와 일치하는 "최소선"이다. **OCI Vault 연동과 키 회전은 데모 도구 범위 외(비목표)** — 단일 시연자가 자신의 노트북/VM에서 단기간 사용하는 도구이므로 도입하지 않는다.
 
 ### 3.3.1 생성 리소스 대장(ledger) — FR-10 / X2 결정
 
@@ -453,7 +455,7 @@ flowchart TB
 | `OCI_CLI_PROFILE` | `DEFAULT` | wallet 자동 다운로드(§3.1.1) 시 사용할 `~/.oci/config` 프로파일 |
 | `DB_POOL_MAX` | `4` | 커넥션당 풀 최대 세션 |
 | `DB_CALL_TIMEOUT_MS` | `15000` | 일반 쿼리 call_timeout |
-| `SELECTAI_CALL_TIMEOUT_MS` | `120000` | GENERATE 계열 call_timeout |
+| `SELECTAI_CALL_TIMEOUT_MS` | `120000` | GENERATE 계열 call_timeout 상한(runsql/explainsql/narrate/chat 기준 120s). showsql/showprompt·권한 점검 등 단계별 세분값은 api-spec §12.2 표를 따르며 이 상한을 넘지 않는다 |
 | `DEFAULT_OCI_COMPARTMENT_ID` | TAEWAN.KIM OCID (`ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq`) | 프로파일 `oci_compartment_id` 기본값 |
 | `DEFAULT_OCI_REGION` | `us-chicago-1` | 프로파일 `region` 기본값 |
 | `DEFAULT_MODEL` | `meta.llama-3.3-70b-instruct` | 프로파일 `model` 기본값 |
@@ -469,7 +471,7 @@ flowchart TB
 ### 6.5 데모 스키마 시드 (오픈 이슈 O3 결정)
 
 - SH 스키마: ADB 기본 제공 샘플(`SH` 스키마) **존재를 점검만** 하고 생성하지 않는다(FR-03 `demo_schema` 항목). 없으면 추천 프롬프트 버튼을 비활성화하고 안내.
-- P0 데이터셋은 SH + FR-08 모호 무비 스키마만 사용한다. 한국형 `SALES_DEMO`는 PDF 근거 없는 자체 설계라 MVP 데모 실패 리스크를 늘리므로 P1로 보류한다.
+- P0이 시드/검증해 제공하는 데모 **프리셋**은 SH + FR-08 모호 무비 스키마 2종뿐이다. 단 대상 테이블은 프리셋에 한정되지 않으며, 사용자는 인증 사용자가 볼 수 있는 임의 테이블을 `object_list`로 선택할 수 있다(FR-04, `schema_service`). 한국형 `SALES_DEMO`는 PDF 근거 없는 자체 설계라 MVP 데모 실패 리스크를 늘리므로 P1 프리셋으로 보류한다.
 - FR-08 모호 무비 스키마는 `backend/seeds/` 아래 3파일 체계로 관리한다.
   - `movie_schema.sql`: admin 스키마 하위에 `TABLE1(c1,c2,c3)`·`TABLE2(c1,c6,c7)`·`TABLE3(c1,c4,c5)` 형태(레퍼런스 §7 ch19 패턴, api-spec §7.1과 동일 레이아웃)로 테이블과 정적 시드 데이터 생성.
   - `movie_comments.sql`: `COMMENT ON TABLE/COLUMN` 증강 문구 적용. 데모 ③ COMMENT 적용 단계에서 사용.

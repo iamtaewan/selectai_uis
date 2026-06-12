@@ -46,7 +46,7 @@ Select AI Demo Studio는 wallet zip 업로드부터 권한 점검, 프로파일 
 
 ### 2.2 비목표 (Non-goals)
 
-- **프로덕션급 보안**: 사내 데모 도구다. 다만 wallet/비밀번호는 서버 측 암호화 저장하고 로그에 남기지 않는다(최소선). SSO, 감사 로그, 비밀 관리 서비스 연동은 범위 외.
+- **프로덕션급 보안**: 사내 데모 도구다. 다만 wallet/비밀번호는 서버 측 암호화 저장하고 로그에 남기지 않는다(최소선). SSO, 감사 로그, 비밀 관리 서비스 연동은 범위 외. **암호화 키 회전·OCI Vault 연동도 비목표** — 단일 시연자가 단기간 사용하는 도구이므로 도입하지 않는다 (로컬 `secret.key` + Fernet 최소선으로 충분).
 - **멀티테넌시 / 다중 사용자 동시성**: 단일 시연자 사용 가정. 사용자 계정 체계 없음.
 - **admin 외 DB 사용자 지원**: DB 사용자는 `admin` 고정 (확정 사항). 일반 사용자용 grant 위저드는 "시연용 기능"으로만 제공.
 - **Select AI Agent (Part II)**: `agent` 액션 및 `DBMS_CLOUD_AI_AGENT` 패키지는 범위 외 (P2 후보로만 기록).
@@ -125,6 +125,8 @@ Select AI Demo Studio는 wallet zip 업로드부터 권한 점검, 프로파일 
 ### FR-04. 프로파일 설정 — 속성별 한국어 해설 — **P0**
 
 **설명**: `DBMS_CLOUD_AI.CREATE_PROFILE`의 attributes JSON을 폼 UI로 구성한다. 레퍼런스 §3에서 검증된 21개 속성(`provider`, `credential_name`, `object_list`, `object_list_mode`, `comments`, `annotations`, `constraints`, `conversation`, `temperature`, `max_tokens`, `model`, `region`, `oci_compartment_id`, `oci_apiformat`, `oci_endpoint_id`, `enforce_object_list`, `case_sensitive_values`, `target_language`, `vector_index_name`, `azure_resource_name`/`azure_deployment_name`, `provider_endpoint`) 각각에 한국어 해설(레퍼런스의 해설 문구 사용)과 근거 페이지를 툴팁/패널로 표시한다.
+
+**대상 테이블 선택 (핵심)**: 프로파일의 `object_list`(NL2SQL 대상 객체)는 **인증한 커넥션 사용자가 DB에서 볼 수 있는 테이블 중 사용자가 직접 선택**해 구성한다. 앱이 제공하는 SH·무비 모호 스키마는 데모 편의용 프리셋일 뿐이며(X3 결정), 사용자는 자신이 접속한 스키마의 임의 테이블을 대상으로 골라 프로파일을 만들 수 있어 고객 자신의 데이터로 즉석 시연이 가능하다.
 
 **기본값 (확정)**: `provider: "oci"`, `model: "meta.llama-3.3-70b-instruct"` (OCI GenAI 기본 모델), `oci_compartment_id`는 TAEWAN.KIM 컴파트먼트 OCID, `region: "us-chicago-1"`.
 
@@ -321,8 +323,8 @@ Select AI Demo Studio는 wallet zip 업로드부터 권한 점검, 프로파일 
 
 | # | 이슈 | 담당(권장) | 기한 |
 |---|---|---|---|
-| O1 | OCI GenAI 인증 기본값: Resource Principal(`OCI$RESOURCE_PRINCIPAL`) vs API 서명 키 credential — Resource Principal은 테넌시 Dynamic Group/정책 선행 필요. 둘 다 지원하되 UI 기본값 결정 필요 | 아키텍트 | architecture.md 작성 시 |
+| O1 | **결정 완료**: UI 기본값은 Resource Principal(`ENABLE_PRINCIPAL_AUTH(provider=>'OCI')` + `OCI$RESOURCE_PRINCIPAL`), API 서명 키 방식 폴백 제공. 두 방식 모두 폼 지원 (architecture.md §6.4) | 아키텍트 | 완료 |
 | O2 | **결정 완료**: 커넥션 자격은 `~/.selectai/connections.json`에 Fernet 암호화 저장(키는 `secret.key`/`APP_SECRET_KEY`), wallet은 `~/.selectai/wallets/`에 파일 보관. SQLite 미사용 — JSON 파일 저장소로 통일 | 아키텍트/백엔드 | 완료 |
-| O3 | **결정 완료**: P0은 SH 스키마(존재 점검)와 무비 모호 스키마만 사용. 한국형 `SALES_DEMO`는 PDF 근거 없는 자체 설계이므로 P1로 보류 | PM/백엔드 | 완료 |
+| O3 | **결정 완료**: P0이 시드/검증해 제공하는 데모 프리셋은 SH(존재 점검)와 무비 모호 스키마 2종뿐이다. 단 대상 테이블은 프리셋에 한정되지 않으며, 사용자는 인증 스키마에서 보이는 임의 테이블을 `object_list`로 선택할 수 있다(FR-04). 한국형 `SALES_DEMO`는 PDF 근거 없는 자체 설계이므로 P1 프리셋으로 보류 | PM/백엔드 | 완료 |
 | O4 | **결정 완료**: 새 conversation 기본 `retention_days=7`, 데모 종료 시 자동 삭제 없음. PG-08 Cleanup에서 수동 일괄 삭제 | PM/백엔드 | 완료 |
-| O5 | OCI Compute 배포 형태(단일 VM + reverse proxy 가정) 및 HTTPS 적용 범위 | 아키텍트 | 배포 전 |
+| O5 | **결정 완료**: 단일 OCI Compute VM + nginx(리버스 프록시/TLS 종단) + systemd 관리 uvicorn(루프백 바인딩), 443만 개방, Docker 미채택 (architecture.md §6.2) | 아키텍트 | 완료 (실배포 시 적용) |
