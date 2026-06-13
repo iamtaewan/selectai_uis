@@ -25,6 +25,13 @@ export function StatusBadge({ status, children }: StatusBadgeProps) {
     <span
       className={`inline-flex h-[22px] items-center gap-1 rounded-full px-2 text-xs font-medium ${STATUS_CLASS[status]}`}
     >
+      {/* 실행 중 = 점 펄스 (style §5.7) */}
+      {status === "running" ? (
+        <span
+          className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--color-running)]"
+          aria-hidden
+        />
+      ) : null}
       {children}
     </span>
   );

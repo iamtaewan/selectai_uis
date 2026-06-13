@@ -1,16 +1,524 @@
 /**
- * Playground 페이지 스텁 — PG-04 (/playground) / FR-06.
- * Select AI 플레이그라운드 — 액션 탭(runsql/showsql/explainsql/narrate/chat) 시연.
- * 설계 근거: design.md PG-04 절. 구현 담당 에이전트가 본문을 채운다.
- * 라우트 등록은 App.tsx (수정 금지) — 컴포넌트 이름/기본 export 유지할 것.
+ * Playground 페이지 — PG-04 (/playground) / FR-06.
+ * Select AI 플레이그라운드 — 같은 자연어 질문을 액션만 바꿔 실행하며 차이를 시연한다.
+ * 근거: design.md §3 PG-04, api-spec §5 (selectai/generate·feedback·suggested-prompts·actions).
+ * - 액션 탭: runsql/showsql/explainsql/narrate/chat (P0) + showprompt (P1 배지)
+ * - 추천 질문 칩: 클릭 = 입력 채움만 (자동 실행 금지 — design.md §5 원칙 5)
+ * - 모든 결과 카드 하단에 실제 호출 SQL(envelope.executed_sql) 펼침
+ * - 액션 비교 모드: P0 5개 액션 병렬 실행 → 5열 카드
  */
-export function Playground() {
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+
+import { ApiError, getEnvelope, postEnvelope } from "../api/client";
+import type {
+  ActionMeta,
+  DefaultProfileSetting,
+  Envelope,
+  FeedbackRequest,
+  GenerateResult,
+  ProfileSummary,
+  SelectAIAction,
+  SuggestedPrompt,
+} from "../api/types";
+import Button from "../components/Button";
+import Panel from "../components/Panel";
+import ResultGrid from "../components/ResultGrid";
+import SqlBlock from "../components/SqlBlock";
+import StatusBadge from "../components/StatusBadge";
+
+/** 탭에 노출하는 액션 — P0 5개 + showprompt(P1). showparameter는 존재하지 않음(정의 금지) */
+const TAB_ACTIONS: { action: SelectAIAction; p1?: boolean }[] = [
+  { action: "runsql" },
+  { action: "showsql" },
+  { action: "explainsql" },
+  { action: "narrate" },
+  { action: "chat" },
+  { action: "showprompt", p1: true },
+];
+
+const P0_ACTIONS: SelectAIAction[] = ["runsql", "showsql", "explainsql", "narrate", "chat"];
+
+/** SQL 투명 모드 — localStorage preference (design.md PG-08 X4 결정: 백엔드 API 없음). 키 이름은 합리적 가정 */
+function isSqlTransparent(): boolean {
+  return localStorage.getItem("selectai.sqlTransparent") !== "off";
+}
+
+/** 단일 실행 결과 (성공 envelope 또는 오류) */
+interface RunOutcome {
+  action: SelectAIAction;
+  envelope?: Envelope<GenerateResult>;
+  error?: unknown;
+}
+
+/** LLM 호출 경과 초 표시용 훅 (design.md §5 원칙 6 — 로딩은 침묵하지 않는다) */
+function useElapsedSeconds(active: boolean): number {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (!active) {
+      setSeconds(0);
+      return;
+    }
+    const started = Date.now();
+    const timer = window.setInterval(
+      () => setSeconds(Math.floor((Date.now() - started) / 1000)),
+      1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [active]);
+  return seconds;
+}
+
+/** 오류 카드 — ORA 원문은 접고 한국어 원인 + 조치 딥링크 (design.md §4 오류 친화 카드) */
+function ErrorCard({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+  const apiError = error instanceof ApiError ? error : null;
+  const appCode = apiError?.body.app_code;
   return (
-    <div>
-      <h2 className="text-2xl font-bold">Playground</h2>
-      <p className="mt-2 text-sm text-[var(--color-neutral-60)]">
-        PG-04 — 구현 예정 (FR-06)
+    <div className="rounded-[var(--radius-lg)] border border-[var(--color-danger)] bg-[var(--color-danger-tint)] p-4">
+      <div className="flex items-center gap-2">
+        <StatusBadge status="error">{appCode ?? "오류"}</StatusBadge>
+        <p className="font-semibold">
+          {appCode === "GENERATED_SQL_INVALID"
+            ? "생성된 SQL이 실행되지 않았습니다 — SELECT 외 구문은 자동 차단됩니다"
+            : appCode === "DATA_ACCESS_DISABLED"
+              ? "Data Access가 비활성입니다 — narrate 액션을 사용할 수 없습니다"
+              : (apiError?.body.message_ko ??
+                (error instanceof Error ? error.message : "알 수 없는 오류"))}
+        </p>
+      </div>
+      {apiError?.body.hint_ko ? (
+        <p className="mt-2 text-sm text-[var(--color-neutral-70)]">{apiError.body.hint_ko}</p>
+      ) : null}
+      {appCode === "GENERATED_SQL_INVALID" ? (
+        <p className="mt-2 text-sm text-[var(--color-neutral-70)]">
+          LLM 환각으로 잘못된 구문이 생성될 수 있습니다 — 질문을 더 구체적으로 바꿔 재시도해
+          보세요.
+        </p>
+      ) : null}
+      {apiError?.body.detail ? (
+        <details className="mt-2 text-sm">
+          <summary className="cursor-pointer text-[var(--color-link)]">ORA 오류 원문 보기</summary>
+          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap font-mono text-xs">
+            {apiError.body.detail}
+          </pre>
+        </details>
+      ) : null}
+      <div className="mt-3 flex gap-2">
+        {onRetry ? (
+          <Button variant="secondary" onClick={onRetry}>
+            재시도
+          </Button>
+        ) : null}
+        {appCode === "DATA_ACCESS_DISABLED" ? (
+          <Link to="/permissions">
+            <Button variant="ghost">권한 점검에서 활성화 →</Button>
+          </Link>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** 피드백 바 — runsql/showsql 결과 카드의 👍/👎 (api-spec §5.3, P1) */
+function FeedbackBar({ prompt, result }: { prompt: string; result: GenerateResult }) {
+  const [sent, setSent] = useState<"positive" | "negative" | null>(null);
+  const [showNegativeForm, setShowNegativeForm] = useState(false);
+  const [feedbackContent, setFeedbackContent] = useState("");
+
+  const feedbackMutation = useMutation({
+    mutationFn: (body: FeedbackRequest) => postEnvelope<unknown>("/selectai/feedback", body),
+    onSuccess: (_data, body) => {
+      setSent(body.feedback_type);
+      setShowNegativeForm(false);
+    },
+  });
+
+  const send = (feedbackType: "positive" | "negative") => {
+    feedbackMutation.mutate({
+      profile_name: result.profile_name,
+      // sql_text에는 자연어 프롬프트 원문을 전달 (api-spec §5.3 예시 패턴)
+      sql_text: prompt,
+      feedback_type: feedbackType,
+      response: result.generated_sql ?? null,
+      feedback_content:
+        feedbackType === "negative" && feedbackContent ? feedbackContent : null,
+      operation: "add",
+    });
+  };
+
+  if (sent) {
+    return (
+      <p className="text-sm text-[var(--color-success)]">
+        피드백이 DBMS_CLOUD_AI.FEEDBACK으로 전달되었습니다 (
+        {sent === "positive" ? "👍 긍정" : "👎 부정"}) — 이후 SQL 생성 정확도에 반영됩니다.
       </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2 text-sm text-[var(--color-neutral-60)]">
+        <span>이 SQL이 정확했나요?</span>
+        <button
+          aria-label="긍정 피드백"
+          className="rounded px-2 py-1 hover:bg-[var(--color-neutral-20)]"
+          disabled={feedbackMutation.isPending}
+          onClick={() => send("positive")}
+        >
+          👍
+        </button>
+        <button
+          aria-label="부정 피드백"
+          className="rounded px-2 py-1 hover:bg-[var(--color-neutral-20)]"
+          disabled={feedbackMutation.isPending}
+          onClick={() => setShowNegativeForm((v) => !v)}
+        >
+          👎
+        </button>
+        <span className="text-xs">(26ai FEEDBACK — feedback_grants 권한 필요)</span>
+      </div>
+      {showNegativeForm ? (
+        <div className="flex gap-2">
+          <input
+            className="h-9 flex-1 rounded-[var(--radius-sm)] border border-[var(--color-neutral-40)] px-3 text-sm"
+            placeholder="개선 힌트 (예: married 비교에 UPPER를 사용해 주세요)"
+            value={feedbackContent}
+            onChange={(e) => setFeedbackContent(e.target.value)}
+          />
+          <Button
+            variant="secondary"
+            loading={feedbackMutation.isPending}
+            onClick={() => send("negative")}
+          >
+            보내기
+          </Button>
+        </div>
+      ) : null}
+      {feedbackMutation.error ? <ErrorCard error={feedbackMutation.error} /> : null}
+    </div>
+  );
+}
+
+/** 결과 본문 — 액션별 차등 렌더 (runsql=grid / showsql=SQL / explainsql=SQL+설명 / 텍스트) */
+function ResultBody({ outcome, prompt }: { outcome: RunOutcome; prompt: string }) {
+  const sqlOpen = isSqlTransparent();
+  if (outcome.error) return <ErrorCard error={outcome.error} />;
+  const envelope = outcome.envelope;
+  if (!envelope) return null;
+  const result = envelope.data;
+
+  return (
+    <div className="flex flex-col gap-3">
+      {result.result_type === "table" && result.columns ? (
+        <>
+          <ResultGrid
+            columns={result.columns}
+            rows={result.rows ?? []}
+            elapsedMs={envelope.elapsed_ms}
+            truncated={result.truncated}
+          />
+          {result.generated_sql ? (
+            <SqlBlock
+              sql={result.generated_sql}
+              label="LLM이 생성한 SQL 보기"
+              defaultOpen={sqlOpen}
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      {result.result_type === "sql" ? (
+        <SqlBlock
+          sql={result.generated_sql ?? result.response_text ?? ""}
+          label="LLM이 생성한 SQL (실행되지 않음)"
+          preview
+          defaultOpen
+        />
+      ) : null}
+
+      {result.result_type === "text" ? (
+        <>
+          {result.generated_sql ? (
+            <SqlBlock sql={result.generated_sql} label="생성된 SQL 보기" defaultOpen={sqlOpen} />
+          ) : null}
+          <div className="whitespace-pre-wrap rounded-[var(--radius-lg)] bg-[var(--color-neutral-10)] p-4 text-base leading-relaxed">
+            {result.response_text}
+          </div>
+        </>
+      ) : null}
+
+      {/* 응답 시간 배지 + 프로파일 */}
+      <div className="flex items-center gap-3">
+        <StatusBadge status="info">⏱ {(envelope.elapsed_ms / 1000).toFixed(1)}s</StatusBadge>
+        <StatusBadge status="neutral">{result.profile_name}</StatusBadge>
+      </div>
+      {(result.action === "runsql" || result.action === "showsql") && result.generated_sql ? (
+        <FeedbackBar prompt={prompt} result={result} />
+      ) : null}
+
+      {/* 교육적 투명성 — 실제 호출 SQL 전문 (design.md §5 원칙 1) */}
+      <SqlBlock
+        sql={envelope.executed_sql}
+        label="이 결과를 만든 실제 호출 SQL 보기"
+        defaultOpen={sqlOpen}
+      />
+    </div>
+  );
+}
+
+export function Playground() {
+  const [prompt, setPrompt] = useState("");
+  const [activeAction, setActiveAction] = useState<SelectAIAction>("runsql");
+  const [selectedProfile, setSelectedProfile] = useState<string>(""); // "" = 앱 기본 프로파일 사용
+  const [outcome, setOutcome] = useState<RunOutcome | null>(null);
+  const [compareOutcomes, setCompareOutcomes] = useState<RunOutcome[] | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const promptRef = useRef<HTMLInputElement>(null);
+
+  // 메타데이터 조회 (정적 — 캐시 무한)
+  const actionsQuery = useQuery({
+    queryKey: ["selectai", "actions"],
+    queryFn: () => getEnvelope<ActionMeta[]>("/selectai/actions"),
+    staleTime: Infinity,
+  });
+  const suggestedQuery = useQuery({
+    queryKey: ["selectai", "suggested-prompts"],
+    queryFn: () => getEnvelope<SuggestedPrompt[]>("/selectai/suggested-prompts"),
+    staleTime: Infinity,
+  });
+  const profilesQuery = useQuery({
+    queryKey: ["profiles"],
+    queryFn: () => getEnvelope<ProfileSummary[]>("/profiles"),
+  });
+  const defaultProfileQuery = useQuery({
+    queryKey: ["settings", "default-profile"],
+    queryFn: () => getEnvelope<DefaultProfileSetting>("/settings/default-profile"),
+  });
+
+  const actionMeta = useMemo(() => {
+    const map = new Map<string, ActionMeta>();
+    actionsQuery.data?.data.forEach((meta) => map.set(meta.action, meta));
+    return map;
+  }, [actionsQuery.data]);
+
+  // 단일 액션 실행 — LLM 호출은 명시적 버튼으로만 (탭 전환만으로 자동 호출 금지)
+  const runMutation = useMutation({
+    mutationFn: (action: SelectAIAction) =>
+      postEnvelope<GenerateResult>("/selectai/generate", {
+        prompt,
+        action,
+        profile_name: selectedProfile || null,
+        row_limit: 100,
+      }),
+    onMutate: () => setCompareOutcomes(null),
+    onSuccess: (envelope, action) => setOutcome({ action, envelope }),
+    onError: (error, action) => setOutcome({ action, error }),
+  });
+
+  // 액션 비교 모드 — P0 5개 액션 병렬 실행 (design.md PG-04 "한 방" 버튼)
+  const runCompare = async () => {
+    if (!prompt.trim()) return;
+    setCompareLoading(true);
+    setOutcome(null);
+    const settled = await Promise.allSettled(
+      P0_ACTIONS.map((action) =>
+        postEnvelope<GenerateResult>("/selectai/generate", {
+          prompt,
+          action,
+          profile_name: selectedProfile || null,
+          row_limit: 100,
+        }),
+      ),
+    );
+    setCompareOutcomes(
+      settled.map((res, idx) =>
+        res.status === "fulfilled"
+          ? { action: P0_ACTIONS[idx], envelope: res.value }
+          : { action: P0_ACTIONS[idx], error: res.reason },
+      ),
+    );
+    setCompareLoading(false);
+  };
+
+  const loading = runMutation.isPending || compareLoading;
+  const elapsedSeconds = useElapsedSeconds(loading);
+  const canRun = prompt.trim().length > 0 && !loading;
+  const defaultProfileName = defaultProfileQuery.data?.data.profile_name;
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* 헤더 — 제목 + 프로파일 선택기 */}
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold">Select AI 플레이그라운드</h2>
+          <p className="mt-1 text-sm text-[var(--color-neutral-60)]">
+            같은 자연어 질문을 액션만 바꿔 실행해 결과(표·SQL·설명·서술)를 비교합니다.
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          프로파일
+          <select
+            className="h-9 rounded-[var(--radius-sm)] border border-[var(--color-neutral-40)] bg-[var(--color-neutral-0)] px-2"
+            value={selectedProfile}
+            onChange={(e) => setSelectedProfile(e.target.value)}
+          >
+            <option value="">기본{defaultProfileName ? ` (${defaultProfileName})` : ""}</option>
+            {profilesQuery.data?.data.map((profile) => (
+              <option key={profile.profile_name} value={profile.profile_name}>
+                {profile.profile_name}
+                {profile.status === "DISABLED" ? " (비활성)" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {/* 질문 입력 + 추천 칩 */}
+      <Panel>
+        <div className="flex gap-2">
+          <input
+            ref={promptRef}
+            className="h-11 flex-1 rounded-[var(--radius-sm)] border border-[var(--color-neutral-40)] px-3 text-base"
+            placeholder="자연어로 질문하세요 (예: how many customers in San Francisco are married)"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && canRun) runMutation.mutate(activeAction);
+            }}
+          />
+          <Button
+            large
+            loading={loading}
+            disabled={!canRun}
+            onClick={() => runMutation.mutate(activeAction)}
+          >
+            실행
+          </Button>
+        </div>
+        {/* 추천 질문 칩 — 클릭 = 입력 채움만, 자동 실행 안 함 (시연자가 말할 시간 확보) */}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-[var(--color-neutral-60)]">추천 질문:</span>
+          {suggestedQuery.data?.data.map((suggestion) => (
+            <button
+              key={suggestion.prompt}
+              className="rounded-full border border-[var(--color-neutral-40)] bg-[var(--color-neutral-10)] px-3 py-1 text-sm hover:bg-[var(--color-neutral-20)]"
+              onClick={() => {
+                setPrompt(suggestion.prompt);
+                setActiveAction(suggestion.recommended_action);
+                promptRef.current?.focus();
+              }}
+              title={`스키마: ${suggestion.schema} / 추천 액션: ${suggestion.recommended_action}`}
+            >
+              {suggestion.prompt}
+            </button>
+          ))}
+        </div>
+      </Panel>
+
+      {/* 액션 탭 — 전환 시 질문 유지, 재실행은 명시 버튼으로 */}
+      <div>
+        <div className="flex gap-1 border-b border-[var(--color-neutral-30)]">
+          {TAB_ACTIONS.map(({ action, p1 }) => (
+            <button
+              key={action}
+              className={`flex items-center gap-1 rounded-t-[var(--radius-md)] px-4 py-2 font-mono text-sm ${
+                activeAction === action
+                  ? "border border-b-0 border-[var(--color-neutral-30)] bg-[var(--color-neutral-0)] font-bold text-[var(--color-brand)]"
+                  : "text-[var(--color-neutral-60)] hover:text-[var(--color-neutral-90)]"
+              }`}
+              onClick={() => setActiveAction(action)}
+            >
+              {action}
+              {p1 ? <StatusBadge status="info">P1</StatusBadge> : null}
+            </button>
+          ))}
+        </div>
+
+        <Panel className="rounded-t-none border-t-0">
+          {/* 액션 한 줄 한국어 정의 ⓘ (레퍼런스 §1 액션 표 문구) */}
+          <p className="mb-4 text-sm text-[var(--color-neutral-60)]">
+            ⓘ <span className="font-mono font-semibold">{activeAction}</span> —{" "}
+            {actionMeta.get(activeAction)?.title_ko ?? ""}
+            {actionMeta.get(activeAction)?.description_ko
+              ? ` · ${actionMeta.get(activeAction)?.description_ko}`
+              : ""}
+          </p>
+
+          {/* 로딩 — 실행 중 SQL 패턴 + 경과 초 + 10초 안심 문구 */}
+          {loading ? (
+            <div className="flex flex-col gap-2 rounded-[var(--radius-lg)] bg-[var(--color-neutral-10)] p-6">
+              <p className="font-semibold">
+                ◌ LLM 호출 중… {elapsedSeconds}초
+                {elapsedSeconds >= 10 ? " — OCI GenAI 응답 대기 중입니다 (정상 범위)" : ""}
+              </p>
+              <SqlBlock
+                sql={`SELECT DBMS_CLOUD_AI.GENERATE(\n  prompt       => :prompt,\n  profile_name => :profile_name,\n  action       => :action,\n  params       => :params_json) AS response\nFROM dual;`}
+                label="지금 실행 중인 SQL 패턴 보기"
+                defaultOpen
+              />
+            </div>
+          ) : null}
+
+          {/* 단일 결과 카드 */}
+          {!loading && outcome ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm font-bold">{outcome.action}</span>
+                {outcome.error ? (
+                  <StatusBadge status="error">실패</StatusBadge>
+                ) : (
+                  <StatusBadge status="success">완료</StatusBadge>
+                )}
+              </div>
+              <ResultBody outcome={outcome} prompt={prompt} />
+              {outcome.error ? (
+                <p className="text-sm text-[var(--color-neutral-60)]">
+                  💡 질문을 바꿔보세요 — 컬럼/테이블을 더 구체적으로 언급하면 정확도가 올라갑니다.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* 빈 상태 — 액션 파이프라인 개념 안내 */}
+          {!loading && !outcome && !compareOutcomes ? (
+            <div className="rounded-[var(--radius-lg)] bg-[var(--color-neutral-10)] p-8 text-center text-[var(--color-neutral-60)]">
+              <p className="text-base">추천 질문을 클릭하거나 직접 입력한 뒤 [실행]을 누르세요.</p>
+              <p className="mt-3 font-mono text-sm">
+                질문 → <b>showsql</b>(SQL 생성) → <b>runsql</b>(실행=표) → <b>narrate</b>(서술) /{" "}
+                <b>chat</b>(LLM 직접 대화)
+              </p>
+            </div>
+          ) : null}
+        </Panel>
+      </div>
+
+      {/* 액션 비교 모드 — P2 페르소나 "한 방" 시연 */}
+      <Panel title="액션 비교 모드">
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" loading={compareLoading} disabled={!canRun} onClick={runCompare}>
+            모든 P0 액션 한 번에 실행 → 5열 비교
+          </Button>
+          <span className="text-sm text-[var(--color-neutral-60)]">
+            같은 질문을 runsql/showsql/explainsql/narrate/chat으로 병렬 실행합니다 (LLM 5회 호출).
+          </span>
+        </div>
+        {compareOutcomes ? (
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3 xl:grid-cols-5">
+            {compareOutcomes.map((compareOutcome) => (
+              <section
+                key={compareOutcome.action}
+                className="min-w-0 rounded-[var(--radius-lg)] border border-[var(--color-neutral-30)] p-4"
+              >
+                <h4 className="mb-2 font-mono text-sm font-bold">{compareOutcome.action}</h4>
+                <div className="max-h-96 overflow-y-auto text-sm">
+                  <ResultBody outcome={compareOutcome} prompt={prompt} />
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : null}
+      </Panel>
     </div>
   );
 }
