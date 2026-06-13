@@ -12,8 +12,18 @@ def test_health_ok(client: TestClient) -> None:
     assert "elapsed_ms" in body
 
 
-def test_stub_returns_501_envelope(client: TestClient) -> None:
-    """스텁 엔드포인트 — 501 + §1.4 오류 envelope."""
+def test_attribute_meta_implemented(client: TestClient) -> None:
+    """GET /profiles/attribute-meta — 구현 완료: 검증 21속성(엔트리 22) + defaults (api-spec §4.1).
+
+    (스캐폴딩 시점의 501 스텁 검사를 구현 계약 검사로 대체)
+    """
     res = client.get("/api/v1/profiles/attribute-meta")
-    assert res.status_code == 501
-    assert res.json()["error"]["app_code"] == "NOT_IMPLEMENTED"
+    assert res.status_code == 200
+    body = res.json()
+    attrs = body["data"]["verified_attributes"]
+    assert len(attrs) == 22  # azure_resource_name/azure_deployment_name 쌍 포함
+    names = {a["name"] for a in attrs}
+    assert {"provider", "comments", "model", "object_list", "enforce_object_list"} <= names
+    assert body["data"]["defaults"]["provider"] == "oci"
+    assert body["data"]["defaults"]["model"] == "meta.llama-3.3-70b-instruct"
+    assert body["executed_sql"] == []

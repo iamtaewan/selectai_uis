@@ -14,8 +14,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Header
 
-from app.errors import not_implemented
+from app.db import oracle
 from app.schemas.models import Envelope, FeedbackRequest, GenerateRequest
+from app.services import common, selectai_service
 
 router = APIRouter(prefix="/selectai", tags=["selectai"])
 
@@ -23,7 +24,8 @@ router = APIRouter(prefix="/selectai", tags=["selectai"])
 @router.get("/actions", response_model=Envelope)
 async def list_actions() -> Envelope:
     """§5.1 액션 메타데이터 — 레퍼런스 §1 공식 표만 (showparameter 미존재·미포함)."""
-    raise not_implemented("액션 메타데이터")
+    started = common.start_timer()
+    return common.make_envelope(selectai_service.ACTIONS_META, [], started)
 
 
 @router.post("/generate", response_model=Envelope)
@@ -32,7 +34,19 @@ async def generate(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§5.2 액션 실행 — data: GenerateResult. runsql은 2단계(showsql → 검증 실행)."""
-    raise not_implemented("Select AI 실행")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    result = await selectai_service.run_generate(
+        connection_id,
+        prompt=body.prompt,
+        action=body.action,
+        profile_name=body.profile_name,
+        conversation_id=body.conversation_id,
+        row_limit=body.row_limit,
+        recorder=recorder,
+    )
+    return common.make_envelope(result, recorder.statements, started)
 
 
 @router.post("/feedback", response_model=Envelope)
@@ -41,10 +55,15 @@ async def feedback(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§5.3 피드백 (P1) — DBMS_CLOUD_AI.FEEDBACK."""
-    raise not_implemented("피드백")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    result = await selectai_service.send_feedback(connection_id, body, recorder)
+    return common.make_envelope(result, recorder.statements, started)
 
 
 @router.get("/suggested-prompts", response_model=Envelope)
 async def suggested_prompts() -> Envelope:
     """§5.4 추천 프롬프트 (canned, SH 스키마 검증 예제) — 정적."""
-    raise not_implemented("추천 프롬프트")
+    started = common.start_timer()
+    return common.make_envelope(selectai_service.SUGGESTED_PROMPTS, [], started)

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Header, Query, status
 
-from app.errors import not_implemented
+from app.db import oracle
 from app.schemas.models import (
     CommentsApplyRequest,
     DemoSchemaRequest,
@@ -20,6 +20,7 @@ from app.schemas.models import (
     Envelope,
     ProfilePairRequest,
 )
+from app.services import common, enrichment_service
 
 router = APIRouter(prefix="/enrichment", tags=["enrichment"])
 
@@ -30,7 +31,11 @@ async def create_demo_schema(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§7.1 모호 스키마(c1~c7) 생성/시드 — data: {tables, seeded_rows}."""
-    raise not_implemented("데모 스키마 생성")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    result = await enrichment_service.create_demo_schema(connection_id, body.reset, recorder)
+    return common.make_envelope(result, recorder.statements, started)
 
 
 @router.delete("/demo-schema", response_model=Envelope)
@@ -38,7 +43,11 @@ async def delete_demo_schema(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§7.1 데모 테이블/비교용 프로파일 쌍 정리 (movie_reset.sql 기준)."""
-    raise not_implemented("데모 스키마 정리")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    result = await enrichment_service.drop_demo_schema(connection_id, recorder)
+    return common.make_envelope(result, recorder.statements, started)
 
 
 @router.get("/comments", response_model=Envelope)
@@ -48,7 +57,11 @@ async def get_comments(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§7.2 코멘트 조회 — 테이블 코멘트 + 컬럼별 코멘트 목록."""
-    raise not_implemented("코멘트 조회")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    result = await enrichment_service.get_comments(connection_id, owner, table, recorder)
+    return common.make_envelope(result, recorder.statements, started)
 
 
 @router.put("/comments", response_model=Envelope)
@@ -57,7 +70,15 @@ async def apply_comments(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§7.3 COMMENT DDL 적용 — preview_only=true면 sql_preview 배열만 반환."""
-    raise not_implemented("코멘트 적용")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    if body.preview_only:
+        # 미리보기=실행 동일 빌더 — 실행 없이 DDL 목록만 (FR-08 수용 기준)
+        statements = enrichment_service.build_comment_ddl(body)
+        return common.make_envelope({"sql_preview": statements}, [], started)
+    result = await enrichment_service.apply_comments(connection_id, body, recorder)
+    return common.make_envelope(result, recorder.statements, started)
 
 
 @router.post("/profile-pair", response_model=Envelope, status_code=status.HTTP_201_CREATED)
@@ -66,7 +87,11 @@ async def create_profile_pair(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§7.4 전/후 프로파일 쌍 생성 — data: {profile_off, profile_on}."""
-    raise not_implemented("프로파일 쌍 생성")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    result = await enrichment_service.create_profile_pair(connection_id, body, recorder)
+    return common.make_envelope(result, recorder.statements, started)
 
 
 @router.post("/compare", response_model=Envelope)
@@ -75,4 +100,8 @@ async def compare_enrichment(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§7.5 전/후 비교 실행 — data: EnrichCompareResult (한쪽 실패는 error 필드로)."""
-    raise not_implemented("증강 비교 실행")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    result = await enrichment_service.compare(connection_id, body, recorder)
+    return common.make_envelope(result, recorder.statements, started)

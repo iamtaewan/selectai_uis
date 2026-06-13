@@ -11,8 +11,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Header, Query
 
-from app.errors import not_implemented
+from app.db import oracle
 from app.schemas.models import Envelope
+from app.services import common, schema_service
 
 router = APIRouter(prefix="/schema", tags=["schema"])
 
@@ -22,7 +23,11 @@ async def list_owners(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§8.1 소유자 목록 — data: {current_schema, owners: [{owner, is_current}]}."""
-    raise not_implemented("스키마 목록")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    data = await schema_service.list_owners(connection_id, recorder)
+    return common.make_envelope(data, recorder.statements, started)
 
 
 @router.get("/tables", response_model=Envelope)
@@ -31,7 +36,11 @@ async def list_tables(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§8.2 테이블 목록 — data: list[TableInfo] (owner 포함 — ObjectRef 매핑용)."""
-    raise not_implemented("테이블 목록")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    data = await schema_service.list_tables(connection_id, owner, recorder)
+    return common.make_envelope(data, recorder.statements, started)
 
 
 @router.get("/tables/{owner}/{table}/columns", response_model=Envelope)
@@ -41,4 +50,8 @@ async def list_columns(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§8.3 컬럼 목록 — data: list[ColumnInfo]."""
-    raise not_implemented("컬럼 목록")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    data = await schema_service.list_columns(connection_id, owner, table, recorder)
+    return common.make_envelope(data, recorder.statements, started)

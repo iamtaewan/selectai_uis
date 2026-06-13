@@ -10,8 +10,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Header, Query
 
-from app.errors import not_implemented
+from app.db import oracle
 from app.schemas.models import Envelope, PrivilegeApplyRequest
+from app.services import common, prereq_service
 
 router = APIRouter(prefix="/privileges", tags=["privileges"])
 
@@ -24,7 +25,18 @@ async def check_privileges(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§3.1 점검 — data: PrivilegeCheckResult. provider=oci면 network_acl은 not_applicable."""
-    raise not_implemented("권한 점검")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    include_set = {item.strip() for item in (include or "").split(",") if item.strip()}
+    result = await prereq_service.run_checks(
+        connection_id,
+        provider=provider,
+        target_user=target_user,
+        include=include_set,
+        recorder=recorder,
+    )
+    return common.make_envelope(result, recorder.statements, started)
 
 
 @router.post("/apply", response_model=Envelope)
@@ -33,4 +45,8 @@ async def apply_privileges(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§3.2 원클릭 적용 — data: PrivilegeApplyResult (recheck=true면 재점검 동봉)."""
-    raise not_implemented("권한 적용")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    result = await prereq_service.apply_items(connection_id, body, recorder)
+    return common.make_envelope(result, recorder.statements, started)

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Header, status
 
-from app.errors import not_implemented
+from app.db import oracle
 from app.schemas.models import (
     ChatCompareRequest,
     ChatMessageRequest,
@@ -25,6 +25,7 @@ from app.schemas.models import (
     ConversationUpdate,
     Envelope,
 )
+from app.services import common, conversation_service
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -35,7 +36,11 @@ async def create_conversation(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§6.1 대화 생성 — data: ConversationOut (conversation_id = UUID)."""
-    raise not_implemented("대화 생성")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    result = await conversation_service.create_conversation(connection_id, body, recorder)
+    return common.make_envelope(result, recorder.statements, started)
 
 
 @router.get("/conversations", response_model=Envelope)
@@ -43,7 +48,11 @@ async def list_conversations(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§6.3 대화 목록 — data: list[ConversationOut]."""
-    raise not_implemented("대화 목록")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    result = await conversation_service.list_conversations(connection_id, recorder)
+    return common.make_envelope(result, recorder.statements, started)
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=Envelope)
@@ -53,7 +62,20 @@ async def send_message(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§6.2 턴 실행 — data: GenerateResult + conversation_id 에코. 대화 지원 5액션만."""
-    raise not_implemented("메시지 전송")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    result = await conversation_service.send_message(
+        connection_id,
+        conversation_id,
+        prompt=body.prompt,
+        action=body.action,
+        profile_name=body.profile_name,
+        recorder=recorder,
+    )
+    payload = result.model_dump()
+    payload["conversation_id"] = conversation_id  # §6.2 — conversation_id 에코
+    return common.make_envelope(payload, recorder.statements, started)
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=Envelope)
@@ -62,7 +84,17 @@ async def list_messages(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§6.4 턴 이력 — data: {conversation_id, messages: list[ChatMessageOut]}."""
-    raise not_implemented("턴 이력")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    messages = await conversation_service.list_messages(
+        connection_id, conversation_id, recorder
+    )
+    return common.make_envelope(
+        {"conversation_id": conversation_id, "messages": messages},
+        recorder.statements,
+        started,
+    )
 
 
 @router.patch("/conversations/{conversation_id}", response_model=Envelope)
@@ -72,7 +104,13 @@ async def update_conversation(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§6.5 UPDATE_CONVERSATION — data: ConversationOut."""
-    raise not_implemented("대화 수정")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    result = await conversation_service.update_conversation(
+        connection_id, conversation_id, body, recorder
+    )
+    return common.make_envelope(result, recorder.statements, started)
 
 
 @router.delete("/conversations/{conversation_id}", response_model=Envelope)
@@ -81,7 +119,13 @@ async def delete_conversation(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§6.6 DROP_CONVERSATION."""
-    raise not_implemented("대화 삭제")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    result = await conversation_service.drop_conversation(
+        connection_id, conversation_id, recorder
+    )
+    return common.make_envelope(result, recorder.statements, started)
 
 
 @router.delete("/conversations/{conversation_id}/messages/{prompt_id}", response_model=Envelope)
@@ -91,7 +135,11 @@ async def delete_message(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§6.6 보조 — DELETE_CONVERSATION_PROMPT(:prompt_id) 턴 1건 삭제."""
-    raise not_implemented("턴 삭제")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    result = await conversation_service.delete_prompt(connection_id, prompt_id, recorder)
+    return common.make_envelope(result, recorder.statements, started)
 
 
 @router.post("/compare", response_model=Envelope)
@@ -100,4 +148,15 @@ async def compare_context(
     x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
 ) -> Envelope:
     """§6.7 맥락 유무 비교 — data: ChatCompareResult. GENERATE 2회 병렬(asyncio.gather)."""
-    raise not_implemented("맥락 비교")
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    result = await conversation_service.compare_context(
+        connection_id,
+        prompt=body.prompt,
+        action=body.action,
+        conversation_id=body.conversation_id,
+        profile_name=body.profile_name,
+        recorder=recorder,
+    )
+    return common.make_envelope(result, recorder.statements, started)
