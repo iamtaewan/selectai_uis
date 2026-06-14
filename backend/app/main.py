@@ -7,19 +7,24 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.errors import AppError, map_oracle_error
 from app.routers import (
     chat,
+    clone,
     connections,
     dashboard,
     enrichment,
+    meta,
     privileges,
     profiles,
     resources,
@@ -106,3 +111,30 @@ app.include_router(enrichment.router, prefix=API_PREFIX)    # #30~#35
 app.include_router(schema.router, prefix=API_PREFIX)        # #36~#38
 app.include_router(dashboard.router, prefix=API_PREFIX)     # #39
 app.include_router(resources.router, prefix=API_PREFIX)     # #40~#42
+app.include_router(meta.router, prefix=API_PREFIX)          # 메타 강화 (comment/annotation/grok 제안)
+app.include_router(clone.router, prefix=API_PREFIX)         # SH 스키마 복제 (테이블·제약·뷰)
+
+
+# ---- 정적 SPA 서빙 (단일 컨테이너 배포) ----------------------------------------
+# 빌드된 프론트(dist)를 STATIC_DIR로 복사해 두면 FastAPI가 같은 포트에서 SPA를 서빙한다.
+# /api/v1 라우터는 위에서 이미 등록되어 우선 매칭되고, 그 외 경로는 정적 파일 또는
+# index.html(클라이언트 라우팅 폴백)로 응답한다. STATIC_DIR가 없으면(개발 환경) 비활성.
+_static_dir = Path(os.environ.get("STATIC_DIR", Path(__file__).parent / "static"))
+if (_static_dir / "index.html").is_file():
+    _assets = _static_dir / "assets"
+    if _assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(_assets)), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str) -> FileResponse:
+        """비-API 경로 → 정적 파일이 있으면 그 파일, 없으면 index.html (SPA 라우팅)."""
+        if full_path.startswith("api/"):
+            # 매칭 안 된 API 경로는 SPA로 흘리지 않고 404 JSON 유지
+            raise AppError(
+                status_code=404, code="NOT_FOUND", app_code="NOT_FOUND",
+                message_ko="존재하지 않는 API 경로입니다.",
+            )
+        candidate = _static_dir / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(_static_dir / "index.html")

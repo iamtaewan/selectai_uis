@@ -107,6 +107,23 @@ cd frontend && npm run dev                                        # http://local
 
 ---
 
+## 컨테이너 배포 (단일 컨테이너)
+
+프론트(정적 빌드)와 백엔드를 **하나의 이미지**로 묶어 포트 하나(8000)로 서빙합니다. FastAPI가 빌드된 SPA를 직접 서빙하므로 nginx·CORS·별도 프록시가 필요 없습니다. (python-oracledb thin 모드라 Oracle Instant Client도 불필요)
+
+```bash
+# 빌드 + 실행 (compose)
+docker compose up -d --build      # → http://localhost:8000
+
+# 또는 docker 직접
+docker build -t selectai-studio .
+docker run -d -p 8000:8000 -v selectai-data:/data selectai-studio
+```
+
+- **영속 볼륨 필수** — 커넥션·wallet·`secret.key`가 `/data`(`APP_DATA_DIR`)에 저장됩니다. 볼륨이 없으면 재시작 시 모두 사라집니다.
+- **암호화 키** — `APP_SECRET_KEY` 미설정 시 `/data/secret.key`가 자동 생성되어 볼륨에 유지됩니다. 여러 환경에서 같은 데이터를 쓰려면 `APP_SECRET_KEY`를 고정하세요.
+- **wallet 획득** — 기본은 화면에서 **wallet zip 수동 업로드**를 권장합니다(이미지에 OCI CLI 미포함). 자동 다운로드가 필요하면 OCI CLI를 이미지에 추가하고 `~/.oci`를 마운트하세요(`docker-compose.yml` 주석 참고).
+
 ## 테스트
 
 ```bash

@@ -1,0 +1,21 @@
+# 빌드 컨텍스트 최소화 — 의존성·산출물·로컬 부산물 제외
+**/node_modules
+**/.venv
+**/dist
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.DS_Store
+.git
+.gitignore
+**/.env
+**/.env.*
+design-output
+docs
+*.pdf
+*.jpeg
+*.jpg
+*.png
+prompt.md

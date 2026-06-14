@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, File, UploadFile, status
+from fastapi import APIRouter, File, Form, UploadFile, status
 
 from app.schemas.models import (
     ConnectionCreate,
@@ -36,11 +36,16 @@ def _envelope(data: object, executed_sql: list[str], started: float) -> Envelope
 
 
 @router.post("/wallet", response_model=Envelope)
-async def upload_wallet(file: UploadFile = File(...)) -> Envelope:
+async def upload_wallet(
+    file: UploadFile = File(...),
+    # ADB wallet 다운로드 시 설정한 wallet 암호 — 암호화된 ewallet.pem(thin 모드 mTLS) 해제에 필요.
+    # 미입력 시 cwallet.sso(auto-login) wallet에 한해 연결 가능.
+    wallet_password: str | None = Form(default=None),
+) -> Envelope:
     """§2.1 wallet zip 업로드 — data: WalletUploadResult."""
     started = time.perf_counter()
     zip_bytes = await file.read()
-    result = await connection_service.upload_wallet(zip_bytes)
+    result = await connection_service.upload_wallet(zip_bytes, wallet_password=wallet_password)
     return _envelope(result, [], started)
 
 
@@ -88,6 +93,8 @@ async def update_connection(connection_id: str, body: ConnectionUpdate) -> Envel
 
 
 @router.delete("/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_connection(connection_id: str) -> None:
+async def delete_connection(connection_id: str):
+    # 반환 어노테이션(-> None) 제거: FastAPI가 None을 NoneType 응답모델로 잡아
+    # 204(No Content)와 충돌(AssertionError)하므로 어노테이션을 두지 않는다.
     """§2.5 커넥션 삭제 — 풀 종료 + 자격/메타 삭제, wallet은 참조 없을 때만 삭제."""
     await connection_service.delete_connection(connection_id)

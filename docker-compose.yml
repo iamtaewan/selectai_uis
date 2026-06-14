@@ -1,0 +1,23 @@
+# Select AI Studio — 단일 컨테이너 실행 (배포 편의용)
+#   docker compose up -d --build   → http://localhost:8000
+services:
+  selectai-studio:
+    build: .
+    image: selectai-studio:latest
+    ports:
+      - "8000:8000"
+    environment:
+      # 암호화 키 고정 — 미설정 시 /data/secret.key 자동 생성(볼륨에 영속).
+      # 여러 환경에서 동일 키를 쓰려면 값을 명시하세요(Fernet 32B urlsafe base64).
+      # APP_SECRET_KEY: "여기에-고정-키"
+      APP_DATA_DIR: /data
+    volumes:
+      # 커넥션·wallet·설정·secret.key 영속 (재시작에도 유지) — 필수
+      - selectai-data:/data
+      # wallet 자동 다운로드(OCI CLI)를 쓰려면 아래 주석 해제 + 이미지에 OCI CLI 필요.
+      # 기본은 화면에서 wallet zip 수동 업로드 경로를 권장합니다.
+      # - ~/.oci:/root/.oci:ro
+    restart: unless-stopped
+
+volumes:
+  selectai-data:
