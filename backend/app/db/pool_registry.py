@@ -142,6 +142,7 @@ async def get_pool(connection_id: str):
             increment=1,
             getmode=oracledb.POOL_GETMODE_WAIT,
             wait_timeout=10_000,  # ms — 풀 대기 10초 (architecture.md §3.2)
+            ping_interval=30,  # 30초 이상 유휴 커넥션은 acquire 시 health-check → 끊긴 것 교체
             **kwargs,
         )
     except oracledb.Error as exc:

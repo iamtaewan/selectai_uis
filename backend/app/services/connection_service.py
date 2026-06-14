@@ -213,9 +213,17 @@ async def _register_wallet(
     return record
 
 
-async def upload_wallet(zip_bytes: bytes) -> WalletUploadResult:
-    """§2.1 wallet zip 업로드 — 검증 후 wallet_id + alias 목록 반환."""
-    record = await _register_wallet(zip_bytes, source="upload")
+async def upload_wallet(
+    zip_bytes: bytes, wallet_password: str | None = None
+) -> WalletUploadResult:
+    """§2.1 wallet zip 업로드 — 검증 후 wallet_id + alias 목록 반환.
+
+    wallet_password는 암호화된 ewallet.pem(thin 모드 mTLS) 해제에 필요하며,
+    Fernet 암호화되어 wallet 레코드에 저장된다 (security.md §2.1).
+    """
+    record = await _register_wallet(
+        zip_bytes, source="upload", wallet_password=wallet_password
+    )
     return WalletUploadResult(
         wallet_id=record["id"],
         tns_aliases=record["tns_aliases"],
@@ -452,6 +460,19 @@ def _wallet_password_of(wallet: dict[str, Any]) -> str | None:
     return decrypt_secret(enc) if enc else None
 
 
+async def _persist_wallet_password(wallet_id: str, wallet_password: str) -> None:
+    """wallet 레코드에 wallet 암호를 Fernet 암호화 저장 (security.md §2.1 — 평문 금지)."""
+    enc = encrypt_secret(wallet_password)
+
+    def _mutate(doc: dict[str, Any]) -> dict[str, Any]:
+        for w in doc.get("wallets", []):
+            if w["id"] == wallet_id:
+                w["wallet_password_enc"] = enc
+        return doc
+
+    await local_store.update_connections_doc(_mutate)
+
+
 def _check_alias(wallet: dict[str, Any], tns_alias: str) -> None:
     if tns_alias.lower() not in [a.lower() for a in wallet.get("tns_aliases", [])]:
         raise AppError(
@@ -490,6 +511,13 @@ async def create_connection(
     wallet = await _load_wallet_or_404(body.wallet_id)
     _check_alias(wallet, body.tns_alias)
 
+    # wallet 암호가 생성 단계에서 입력되면 wallet 레코드에 영속화(Fernet) — 재접속·풀 재생성에 재사용.
+    if body.wallet_password:
+        await _persist_wallet_password(body.wallet_id, body.wallet_password)
+        effective_wallet_password: str | None = body.wallet_password
+    else:
+        effective_wallet_password = _wallet_password_of(wallet)
+
     recorder = oracle.SqlRecorder()
     db_version: str | None = None
     db_name: str | None = None
@@ -501,7 +529,7 @@ async def create_connection(
                 password=body.password,
                 tns_alias=body.tns_alias,
                 wallet_dir=str(local_store.wallets_dir() / body.wallet_id),
-                wallet_password=_wallet_password_of(wallet),
+                wallet_password=effective_wallet_password,
                 recorder=recorder,
             )
         except oracledb.Error as exc:

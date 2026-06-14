@@ -63,7 +63,8 @@ export function Onboarding() {
 
   return (
     <div className="mx-auto max-w-[880px] py-8 text-center">
-      <h2 className="text-3xl font-bold">Select AI Demo Studio</h2>
+      <img src="/oracle-logo.svg" alt="Oracle" className="mx-auto mb-4 h-7 w-auto" />
+      <h2 className="text-3xl font-bold">Select AI Studio</h2>
       <p className="mt-2 text-lg text-[var(--color-neutral-60)]">
         "말로 데이터를 묻는다 — 15분 안에 보여드립니다"
       </p>

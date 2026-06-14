@@ -1,5 +1,6 @@
 /**
- * Button — style.md §5.1 (primary=잉크 / secondary / danger / ghost).
+ * Button — Redwood (primary=Oracle Red 채움+흰 글자 / secondary=뉴트럴 외곽선 / danger / ghost).
+ * 한 화면에 빨강 primary는 가급적 하나 — 보조 액션은 variant="secondary".
  * 공통: 높이 36px(기본)/44px(large), radius-md, semibold.
  * hover 시 배경 1단계 어둡게, :focus-visible 링은 tokens.css 전역 규칙 사용.
  * 로딩 중 = 스피너 + 비활성 (LLM 호출 중복 방지 — §5.1).

@@ -16,12 +16,15 @@ OWNERS_SQL = (
     "WHERE oracle_maintained = 'N' OR username IN ('SH') "
     "ORDER BY username"
 )
-TABLES_SQL = (
-    "SELECT t.table_name, c.comments, t.num_rows "
-    "FROM ALL_TABLES t LEFT JOIN ALL_TAB_COMMENTS c "
-    "ON c.owner = t.owner AND c.table_name = t.table_name "
-    "WHERE t.owner = :owner ORDER BY t.table_name"
+# ADB의 ADMIN 등 대형 스키마에서 ALL_TABLES⨝ALL_TAB_COMMENTS 전체 조인은 매우 느려
+# 15초 call timeout(DPY-4024)을 넘긴다. owner로 필터된 두 쿼리로 분리 후 파이썬에서 병합한다.
+TABLES_SQL = "SELECT table_name, num_rows FROM ALL_TABLES WHERE owner = :owner ORDER BY table_name"
+TAB_COMMENTS_SQL = (
+    "SELECT table_name, comments FROM ALL_TAB_COMMENTS "
+    "WHERE owner = :owner AND comments IS NOT NULL"
 )
+# 데이터 딕셔너리 조회는 ADB에서 느릴 수 있어 일반(15s)보다 넉넉한 타임아웃 사용
+METADATA_TIMEOUT_MS = pool_registry.CALL_TIMEOUT_PRIVILEGE_MS
 COLUMNS_SQL = (
     "SELECT col.column_name, col.data_type, col.nullable, cc.comments "
     "FROM ALL_TAB_COLUMNS col LEFT JOIN ALL_COL_COMMENTS cc "
@@ -57,34 +60,33 @@ async def list_owners(connection_id: str, recorder: oracle.SqlRecorder) -> dict[
 async def list_tables(
     connection_id: str, owner: str | None, recorder: oracle.SqlRecorder
 ) -> list[dict[str, Any]]:
-    """§8.2 테이블 목록 — owner 미지정 시 CURRENT_SCHEMA. ObjectRef 매핑용 owner 포함."""
+    """§8.2 테이블 목록 — owner 미지정 시 CURRENT_SCHEMA. ObjectRef 매핑용 owner 포함.
+
+    조인 대신 owner로 필터된 두 쿼리(테이블/코멘트)를 받아 파이썬에서 병합한다 (DPY-4024 회피).
+    """
     if owner:
         common.validate_identifier(owner, "스키마 이름")
         target = owner.upper()
-        async with pool_registry.acquire(
-            connection_id, pool_registry.CALL_TIMEOUT_DEFAULT_MS
-        ) as conn:
-            _, rows = await oracle.fetch_all(
-                conn, TABLES_SQL, {"owner": target}, recorder=recorder
-            )
     else:
-        async with pool_registry.acquire(
-            connection_id, pool_registry.CALL_TIMEOUT_DEFAULT_MS
-        ) as conn:
-            target = str(
-                await oracle.fetch_value(conn, CURRENT_SCHEMA_SQL, recorder=recorder)
-            )
-            _, rows = await oracle.fetch_all(
-                conn, TABLES_SQL, {"owner": target}, recorder=recorder
-            )
+        target = None
+
+    async with pool_registry.acquire(connection_id, METADATA_TIMEOUT_MS) as conn:
+        if target is None:
+            target = str(await oracle.fetch_value(conn, CURRENT_SCHEMA_SQL, recorder=recorder))
+        _, rows = await oracle.fetch_all(conn, TABLES_SQL, {"owner": target}, recorder=recorder)
+        _, comment_rows = await oracle.fetch_all(
+            conn, TAB_COMMENTS_SQL, {"owner": target}, recorder=recorder
+        )
+
+    comments_by_table = {str(name): comment for name, comment in comment_rows}
     return [
         {
             "owner": target,
             "table_name": str(table_name),
-            "comment": comments,
+            "comment": comments_by_table.get(str(table_name)),
             "num_rows": int(num_rows) if num_rows is not None else None,
         }
-        for table_name, comments, num_rows in rows
+        for table_name, num_rows in rows
     ]
 
 
@@ -94,9 +96,7 @@ async def list_columns(
     """§8.3 컬럼 목록 (타입/NULL 허용/코멘트)."""
     common.validate_identifier(owner, "스키마 이름")
     common.validate_identifier(table, "테이블 이름")
-    async with pool_registry.acquire(
-        connection_id, pool_registry.CALL_TIMEOUT_DEFAULT_MS
-    ) as conn:
+    async with pool_registry.acquire(connection_id, METADATA_TIMEOUT_MS) as conn:
         _, rows = await oracle.fetch_all(
             conn,
             COLUMNS_SQL,

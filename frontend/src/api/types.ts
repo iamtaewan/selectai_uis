@@ -106,7 +106,19 @@ export interface PrivilegeCheck {
   description_ko: string;
   evidence_sql?: string | null;
   fix_sql?: string | null;
+  remove_sql?: string | null; // 제거(해제) 미리보기 — resource_principal / credential
   docs_ref?: string | null;
+}
+
+/** ~/.oci/config 기반 User Principal 폼 기본값 (GET /privileges/oci-defaults) */
+export interface OciCliDefaults {
+  available: boolean;
+  user_ocid?: string | null;
+  tenancy_ocid?: string | null;
+  fingerprint?: string | null;
+  region?: string | null;
+  key_file?: string | null;
+  private_key?: string | null;
 }
 
 export interface PrivilegeCheckResult {
@@ -129,7 +141,9 @@ export interface CredentialSpec {
 
 export interface PrivilegeApplyItem {
   check_id: string;
+  operation?: "apply" | "remove";
   credential?: CredentialSpec | null;
+  credential_name?: string | null; // remove 시 대상 credential 이름
   enable?: boolean | null;
 }
 

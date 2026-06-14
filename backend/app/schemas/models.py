@@ -74,6 +74,9 @@ class ConnectionCreate(BaseModel):
     tns_alias: str
     username: Literal["admin", "ADMIN"] = "admin"   # v1: admin 고정
     password: str = Field(repr=False)               # 로그/repr 마스킹
+    # ADB wallet 다운로드 시 설정한 암호 — 암호화된 ewallet.pem(thin 모드 mTLS) 해제용.
+    # 입력 시 wallet 레코드에 Fernet 암호화 저장하여 재접속/풀 재생성에 재사용한다.
+    wallet_password: Optional[str] = Field(default=None, repr=False)
     validate_: bool = Field(default=True, alias="validate")
 
 
@@ -121,7 +124,8 @@ class PrivilegeCheck(BaseModel):
     status: CheckStatus
     description_ko: str
     evidence_sql: Optional[str] = None
-    fix_sql: Optional[str] = None  # 적용 전 미리보기 (FR-03)
+    fix_sql: Optional[str] = None      # 적용 전 미리보기 (FR-03)
+    remove_sql: Optional[str] = None   # 제거(해제) 미리보기 — resource_principal / credential
     docs_ref: Optional[str] = None
 
 
@@ -147,8 +151,26 @@ class CredentialSpec(BaseModel):
 
 class PrivilegeApplyItem(BaseModel):
     check_id: str
+    # apply = 적용(생성/활성), remove = 제거(해제: DISABLE_PRINCIPAL_AUTH / DROP_CREDENTIAL)
+    operation: Literal["apply", "remove"] = "apply"
     credential: Optional[CredentialSpec] = None    # check_id == "credential"
+    credential_name: Optional[str] = None          # remove 시 대상 credential 이름
     enable: Optional[bool] = None                  # check_id == "data_access"
+
+
+class OciCliDefaults(BaseModel):
+    """~/.oci/config + key_file에서 읽은 User Principal(API 서명 키) 기본값.
+
+    available=False면 ~/.oci/config가 없는 것이므로 폼 기본값을 채우지 않는다.
+    private_key는 로컬 단일 시연자 도구 한정으로 폼 사전 채움용 제공(평문) — repr 마스킹.
+    """
+    available: bool = False
+    user_ocid: Optional[str] = None
+    tenancy_ocid: Optional[str] = None
+    fingerprint: Optional[str] = None
+    region: Optional[str] = None
+    key_file: Optional[str] = None
+    private_key: Optional[str] = Field(default=None, repr=False)
 
 
 class PrivilegeApplyRequest(BaseModel):
@@ -275,6 +297,11 @@ class GenerateResult(BaseModel):
     rows: Optional[list[list[Any]]] = None
     row_count: Optional[int] = None
     truncated: Optional[bool] = None
+
+
+class CloneRequest(BaseModel):
+    """SH 스키마 복제 요청 — overwrite=True면 기존 동명 테이블을 삭제 후 재생성."""
+    overwrite: bool = True
 
 
 class FeedbackRequest(BaseModel):
@@ -469,3 +496,50 @@ class CleanupItemResult(BaseModel):
 class CleanupResult(BaseModel):
     results: list[CleanupItemResult]
     summary: dict[str, int]
+
+
+# ---------------------------------------------------------------- meta 강화 (FR-04 보강)
+
+
+class MetaCommentRequest(BaseModel):
+    owner: str
+    table: str
+    column: Optional[str] = None     # None이면 테이블 코멘트
+    comment: str
+
+
+class MetaAnnotationRequest(BaseModel):
+    owner: str
+    table: str
+    column: Optional[str] = None     # None이면 테이블 어노테이션
+    name: str                        # 어노테이션 이름(식별자)
+    value: Optional[str] = None      # 값 (선택)
+    operation: Literal["add", "replace", "drop"] = "add"
+
+
+class MetaSuggestRequest(BaseModel):
+    owner: str
+    table: str
+    profile: Optional[str] = None     # 관계 분석용 — 프로파일의 다른 대상 테이블 컨텍스트
+
+
+class MetaAnnotationSpec(BaseModel):
+    name: str
+    value: Optional[str] = None
+
+
+class MetaApplyItem(BaseModel):
+    level: Literal["table", "column"]
+    column: Optional[str] = None              # level=column일 때 대상 컬럼
+    comment: Optional[str] = None             # 지정 시 COMMENT 적용
+    annotations: list[MetaAnnotationSpec] = Field(default_factory=list)
+
+
+class MetaApplyRequest(BaseModel):
+    owner: str
+    table: str
+    items: list[MetaApplyItem]
+
+
+class MetaGrantRequest(BaseModel):
+    privileges: list[str]    # COMMENT ANY TABLE / ALTER ANY TABLE

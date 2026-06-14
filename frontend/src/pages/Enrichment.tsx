@@ -94,12 +94,16 @@ export function Enrichment() {
   const [compareResult, setCompareResult] = useState<EnrichCompareResult | null>(null);
 
   // 데모 테이블 소유 스키마 — 인증 사용자 자신의 스키마 (없으면 ADMIN)
+  // 공유 키 ["schema","owners"]의 반환 형태를 unwrap(SchemaOwnersResult)으로 통일 (ProfileEditor와 일치)
   const ownersQuery = useQuery({
     queryKey: ["schema", "owners"],
-    queryFn: () => getEnvelope<SchemaOwnersResult>("/schema/owners", undefined, { suppressErrorToast: true }),
+    queryFn: async () =>
+      (await getEnvelope<SchemaOwnersResult>("/schema/owners", undefined, {
+        suppressErrorToast: true,
+      })).data,
     staleTime: 60_000,
   });
-  const owner = ownersQuery.data?.data.current_schema ?? "ADMIN";
+  const owner = ownersQuery.data?.current_schema ?? "ADMIN";
 
   // ① 모호 스키마 생성 (reset=true로 매번 깨끗한 "증강 전" 상태에서 시작)
   const createSchema = useMutation({
@@ -130,11 +134,20 @@ export function Enrichment() {
     },
   });
 
-  // ③ 현재 COMMENT 로드 (편집용)
+  // ③ 현재 COMMENT 로드 (편집용) — 데모 테이블(TABLE1~3)만 조회.
+  // owner 전체(예: ADMIN 237개)를 부르면 매우 느리고(DPY-4024) 불필요하므로 테이블별로 가져온다.
   const loadComments = useMutation({
-    mutationFn: () =>
-      getEnvelope<CommentsResult>("/enrichment/comments", { owner }, { suppressErrorToast: true }),
-    onSuccess: (env) => setComments(env.data.tables ?? []),
+    mutationFn: async () => {
+      const results = await Promise.all(
+        DEMO_TABLES.map((t) =>
+          getEnvelope<CommentsResult>("/enrichment/comments", { owner, table: t }, {
+            suppressErrorToast: true,
+          }),
+        ),
+      );
+      return results.flatMap((r) => r.data.tables ?? []);
+    },
+    onSuccess: (tables) => setComments(tables),
   });
 
   // ③ COMMENT 적용 — 추천 문구(현재 입력값)를 컬럼별 COMMENT로 적용

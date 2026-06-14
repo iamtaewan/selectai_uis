@@ -55,6 +55,10 @@ LIST_SUMMARY_ATTRS_SQL = (
     "FROM USER_CLOUD_AI_PROFILE_ATTRIBUTES "
     "WHERE attribute_name IN ('provider', 'model')"
 )
+# credential_name select 채움용 — 현재 사용자가 보유한 자격증명(OCI$RESOURCE_PRINCIPAL 포함)
+LIST_CREDENTIALS_SQL = (
+    "SELECT credential_name FROM USER_CREDENTIALS ORDER BY credential_name"
+)
 PROFILE_STATUS_SQL = (
     "SELECT status FROM USER_CLOUD_AI_PROFILES WHERE profile_name = :profile_name"
 )
@@ -192,6 +196,17 @@ async def create_profile(
     return {"profile_name": profile_upper, "status": "ENABLED", "attributes": attributes}
 
 
+async def list_credentials(
+    connection_id: str, recorder: oracle.SqlRecorder
+) -> list[str]:
+    """현재 사용 가능한 credential 이름 목록 (credential_name select 채움용)."""
+    async with pool_registry.acquire(
+        connection_id, pool_registry.CALL_TIMEOUT_DEFAULT_MS
+    ) as conn:
+        _, rows = await oracle.fetch_all(conn, LIST_CREDENTIALS_SQL, recorder=recorder)
+    return [str(r[0]) for r in rows]
+
+
 async def list_profiles(
     connection_id: str, recorder: oracle.SqlRecorder
 ) -> list[ProfileSummary]:
@@ -283,6 +298,11 @@ def build_update_attributes(
 ) -> ExecutableSql:
     """§4.6 수정 빌더 — 단일이면 SET_ATTRIBUTE, 복수면 SET_ATTRIBUTES."""
     common.validate_identifier(profile_name, "프로파일 이름")
+    # 미설정(null)·빈 값은 제거 — SET_ATTRIBUTE에 빈 값을 주면 ORA-20046(Missing value).
+    # (편집 폼이 미설정 옵션 필드를 null로 함께 보내는 경우 방지)
+    attributes = {
+        k: v for k, v in attributes.items() if v not in (None, "", [], {})
+    }
     if not attributes:
         raise AppError(
             status_code=400,

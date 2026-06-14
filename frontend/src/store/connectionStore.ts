@@ -52,8 +52,15 @@ export const useConnectionStore = create<ConnectionState>()(
     }),
     {
       name: "selectai-ui-prefs",
-      // 표시 preference만 영속화 — 커넥션 선택은 서버 last_used_at 기준 복원 (FR-02)
-      partialize: (state) => ({ mode: state.mode, sqlTransparent: state.sqlTransparent }),
+      // 표시 preference + 활성 커넥션 ID를 영속화.
+      // activeConnectionId를 저장해 새로고침 직후에도 X-Connection-Id 헤더가 즉시 붙는다
+      // (미저장 시 커넥션 복원 전 마운트 쿼리가 CONNECTION_REQUIRED로 실패). 커넥션 메타 객체는
+      // stale 가능성이 있어 저장하지 않고, AppShell에서 커넥션 목록 로드 후 id로 매칭 복원한다.
+      partialize: (state) => ({
+        mode: state.mode,
+        sqlTransparent: state.sqlTransparent,
+        activeConnectionId: state.activeConnectionId,
+      }),
     },
   ),
 );

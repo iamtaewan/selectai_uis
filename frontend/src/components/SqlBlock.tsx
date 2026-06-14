@@ -39,6 +39,46 @@ export function highlightSql(sql: string): ReactNode[] {
   return nodes;
 }
 
+// 줄바꿈을 넣을 주요 절 키워드 (괄호 밖 가독성용)
+const CLAUSE_RE =
+  /\s+\b(FROM|WHERE|GROUP BY|ORDER BY|HAVING|INNER JOIN|LEFT JOIN|RIGHT JOIN|FULL JOIN|CROSS JOIN|JOIN|UNION ALL|UNION|ON)\b/gi;
+
+/**
+ * 한 줄로 정규화된 SQL을 가독성 좋게 복수 라인으로 포맷.
+ * ① 문자열 리터럴을 보호(내부의 콤마/키워드 오인 방지) → ② DBMS_CLOUD_AI.*( ... ) 인자 줄바꿈
+ * → ③ 주요 절 키워드 앞 줄바꿈 → ④ 문자열 복원.
+ */
+export function formatSql(raw: string): string {
+  if (!raw || !raw.trim()) return raw;
+  // ① 문자열 리터럴 보호 ('' escape 포함)
+  const strs: string[] = [];
+  let s = raw.replace(/'(?:[^']|'')*'/g, (m) => {
+    strs.push(m);
+    return `\x00${strs.length - 1}\x00`;
+  });
+  s = s.replace(/\s+/g, " ").trim();
+
+  // ② DBMS_CLOUD_AI 함수 호출: 인자(name => value)를 한 줄씩 (문자열 보호로 괄호/콤마 없음)
+  s = s.replace(
+    /\b(DBMS_CLOUD_AI\.\w+)\s*\(([^()]*)\)/gi,
+    (full, fn: string, args: string) => {
+      if (!args.includes("=>")) return full;
+      const body = args
+        .split(",")
+        .map((p) => "    " + p.trim())
+        .join(",\n");
+      return `${fn}(\n${body}\n)`;
+    },
+  );
+
+  // ③ 주요 절 키워드 앞 줄바꿈
+  s = s.replace(CLAUSE_RE, "\n$1");
+
+  // ④ 문자열 복원
+  s = s.replace(/\x00(\d+)\x00/g, (_m, i) => strs[Number(i)]);
+  return s.trim();
+}
+
 export interface SqlBlockProps {
   sql: string | string[];
   /** 펼침 라벨 — 기본: "이 버튼이 실제로 실행한 SQL 보기" (P3 페르소나 문구) */
@@ -47,6 +87,8 @@ export interface SqlBlockProps {
   preview?: boolean;
   /** 기본 펼침 여부 (SQL 투명 모드/전문가 모드 연동) */
   defaultOpen?: boolean;
+  /** true면 한 줄 SQL을 복수 라인으로 포맷해 가독성 향상 (예: 챗봇 실행 GENERATE SQL) */
+  format?: boolean;
 }
 
 export function SqlBlock({
@@ -54,8 +96,10 @@ export function SqlBlock({
   label = "이 버튼이 실제로 실행한 SQL 보기",
   preview = false,
   defaultOpen = false,
+  format = false,
 }: SqlBlockProps) {
-  const sqlText = Array.isArray(sql) ? sql.join("\n\n") : sql;
+  const joined = Array.isArray(sql) ? sql.join("\n\n") : sql;
+  const sqlText = format ? joined.split("\n\n").map(formatSql).join("\n\n") : joined;
   const [open, setOpen] = useState(defaultOpen);
   const [copied, setCopied] = useState(false);
 

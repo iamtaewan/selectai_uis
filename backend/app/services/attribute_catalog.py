@@ -21,27 +21,61 @@ DEFAULTS: dict[str, str] = {
     "oci_compartment_id": TAEWAN_KIM_COMPARTMENT_OCID,
 }
 
-# OCI GenAI Chat 모델 (selectai-reference §5 p15 표)
+# OCI GenAI Chat 모델 — us-chicago-1 ACTIVE/CHAT 모델 목록(2026-06 OCI CLI 기준).
+# 벤더별·최신/빠른 모델 우선 정렬. (voice/tts 모델은 NL2SQL 부적합으로 제외)
 OCI_CHAT_MODELS: list[str] = [
-    "meta.llama-3.3-70b-instruct",
-    "meta.llama-3.2-90b-vision-instruct",
-    "meta.llama-3.2-11b-vision-instruct",
-    "meta.llama-3.1-70b-instruct",
-    "meta.llama-3.1-405b-instruct",
-    "cohere.command-r-08-2024",
-    "cohere.command-r-plus-08-2024",
-    "cohere.command-r-16k",
-    "cohere.command-r-plus",
+    # xAI Grok — 최신/빠른 변형 우선 (NL2SQL 권장: grok-4.3, grok-4-fast-non-reasoning)
+    "xai.grok-4.3",
+    "xai.grok-4-fast-non-reasoning",
+    "xai.grok-4-fast-reasoning",
+    "xai.grok-4-1-fast-non-reasoning",
+    "xai.grok-4-1-fast-reasoning",
+    "xai.grok-4",
+    "xai.grok-4.20-reasoning",
+    "xai.grok-4.20-non-reasoning",
+    "xai.grok-4.20-0309-reasoning",
+    "xai.grok-4.20-0309-non-reasoning",
+    "xai.grok-4.20-multi-agent",
+    "xai.grok-4.20-multi-agent-0309",
+    "xai.grok-code-fast-1",
     "xai.grok-3",
     "xai.grok-3-fast",
     "xai.grok-3-mini",
     "xai.grok-3-mini-fast",
-    "xai.grok-4",
-    "xai.grok-4-fast-reasoning",
-    "xai.grok-4-fast-non-reasoning",
+    # Google Gemini
+    "google.gemini-2.5-pro",
+    "google.gemini-2.5-flash",
+    "google.gemini-2.5-flash-lite",
+    # Meta Llama
+    "meta.llama-4-maverick-17b-128e-instruct-fp8",
+    "meta.llama-4-scout-17b-16e-instruct",
+    "meta.llama-3.3-70b-instruct",
+    "meta.llama-3.1-405b-instruct",
+    "meta.llama-3.1-70b-instruct",
+    "meta.llama-3.2-90b-vision-instruct",
+    "meta.llama-3.2-11b-vision-instruct",
+    "meta.llama-3-70b-instruct",
+    # Cohere Command
+    "cohere.command-a-03-2025",
+    "cohere.command-a-reasoning",
+    "cohere.command-a-vision",
+    "cohere.command-latest",
+    "cohere.command-plus-latest",
+    "cohere.command-r-plus-08-2024",
+    "cohere.command-r-08-2024",
+    "cohere.command-r-16k",
+    "cohere.command-r-plus",
+    # OpenAI (OCI 제공 OSS)
+    "openai.gpt-oss-120b",
+    "openai.gpt-oss-20b",
 ]
 
-DEPRECATED_MODELS: list[str] = ["cohere.command-r-16k", "cohere.command-r-plus"]
+# 구형/대체 권장 모델 — UI에서 비활성/경고 배지로 표기
+DEPRECATED_MODELS: list[str] = [
+    "cohere.command-r-16k",
+    "cohere.command-r-plus",
+    "meta.llama-3-70b-instruct",
+]
 
 # 검증 속성 카탈로그 (selectai-reference §3 표 전체 — 해설은 한국어 원문 그대로)
 VERIFIED_ATTRIBUTES: list[dict[str, Any]] = [

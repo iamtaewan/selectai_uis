@@ -5,7 +5,7 @@
  * provider=oci(기본)면 네트워크 ACL은 "필요 없음(해당없음)" (design.md 설계 전제 4).
  * 설계 근거: design.md PG-02, api-spec §3.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -13,6 +13,7 @@ import { ApiError, getEnvelope, postEnvelope } from "../api/client";
 import type {
   CheckStatus,
   CredentialSpec,
+  OciCliDefaults,
   PrivilegeApplyItem,
   PrivilegeApplyResult,
   PrivilegeCheck,
@@ -41,7 +42,7 @@ export function Permissions() {
   const activeConnection = useConnectionStore((s) => s.activeConnection);
 
   const [provider, setProvider] = useState<(typeof PROVIDERS)[number]>("oci");
-  // credential 항목 — API 서명 키 폼 (방법 B 폴백, O1 결정: Resource Principal 권장)
+  // credential 항목 — API 서명 키(User Principal) 폼 (방법 B 폴백, O1 결정: Resource Principal 권장)
   const [credFormOpen, setCredFormOpen] = useState(false);
   const [cred, setCred] = useState<CredentialSpec>({
     credential_name: "GENAI_CRED",
@@ -51,6 +52,35 @@ export function Permissions() {
     private_key: "",
     fingerprint: "",
   });
+
+  // ~/.oci/config + api-key.pem 기반 User Principal 폼 기본값 (DB 비의존 — 로컬 파일)
+  const { data: ociDefaults } = useQuery({
+    queryKey: ["privileges", "oci-defaults"],
+    queryFn: async () =>
+      (await getEnvelope<OciCliDefaults>("/privileges/oci-defaults", undefined, {
+        suppressErrorToast: true,
+      })).data,
+    staleTime: Infinity,
+  });
+  const [ociPrefilled, setOciPrefilled] = useState(false);
+
+  // 기본값이 있고(available) 아직 사용자가 입력하지 않았다면 폼을 자동 채움 (없으면 생략)
+  const applyOciDefaults = (d: OciCliDefaults) =>
+    setCred((prev) => ({
+      ...prev,
+      auth_type: "api_key",
+      user_ocid: d.user_ocid ?? prev.user_ocid,
+      tenancy_ocid: d.tenancy_ocid ?? prev.tenancy_ocid,
+      fingerprint: d.fingerprint ?? prev.fingerprint,
+      private_key: d.private_key ?? prev.private_key,
+    }));
+
+  useEffect(() => {
+    if (ociDefaults?.available && !ociPrefilled) {
+      applyOciDefaults(ociDefaults);
+      setOciPrefilled(true);
+    }
+  }, [ociDefaults, ociPrefilled]);
 
   const queryKey = ["privileges", "check", provider];
   const {
@@ -96,6 +126,16 @@ export function Permissions() {
     if (check.check_id === "credential") return { check_id: check.check_id, credential: cred };
     if (check.check_id === "data_access") return { check_id: check.check_id, enable: true };
     return { check_id: check.check_id };
+  };
+
+  /** 제거(해제) 실행 — resource_principal / credential. 미리보기는 화면에, 실행 전 확인. */
+  const removeItem = (check: PrivilegeCheck) => {
+    const label =
+      check.check_id === "resource_principal" ? "Resource Principal 해제" : "credential 제거";
+    if (!window.confirm(`${label}을(를) 실행할까요? 이 작업은 DB에 즉시 반영됩니다.`)) return;
+    const item: PrivilegeApplyItem = { check_id: check.check_id, operation: "remove" };
+    if (check.check_id === "credential") item.credential_name = cred.credential_name;
+    applyMutation.mutate([item]);
   };
 
   const failedChecks = result?.checks.filter((c) => c.status === "fail") ?? [];
@@ -187,8 +227,37 @@ export function Permissions() {
                     <SqlBlock label="근거 SQL 보기" sql={check.evidence_sql} />
                   ) : null}
 
-                  {/* 미충족 항목 — fix_sql 전문 미리보기(필수) + 원클릭 적용 */}
-                  {check.status !== "pass" && check.fix_sql ? (
+                  {/* Data Access — 상시 거버넌스 토글 (앱은 DB 실제 상태를 읽을 수 없어 강제 적용 제공) */}
+                  {check.check_id === "data_access" ? (
+                    <div className="flex flex-col gap-2 rounded-[var(--radius-md)] bg-[var(--color-neutral-10)] p-3">
+                      <p className="text-xs text-[var(--color-neutral-60)]">
+                        ⓘ 표시 상태는 앱이 기록한 추정값이며 DB 실제 상태와 다를 수 있습니다. narrate/합성
+                        데이터가 ORA-20000으로 막히면 아래 [활성화]로 ENABLE_DATA_ACCESS를 직접 실행하세요.
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          loading={applyMutation.isPending}
+                          onClick={() =>
+                            applyMutation.mutate([{ check_id: "data_access", enable: true }])
+                          }
+                        >
+                          활성화 (ENABLE)
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          loading={applyMutation.isPending}
+                          onClick={() =>
+                            applyMutation.mutate([{ check_id: "data_access", enable: false }])
+                          }
+                        >
+                          비활성화 (DISABLE)
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* 미충족 항목 — fix_sql 전문 미리보기(필수) + 원클릭 적용 (data_access는 위 토글로 처리) */}
+                  {check.status !== "pass" && check.fix_sql && check.check_id !== "data_access" ? (
                     <div className="flex flex-col gap-2 rounded-[var(--radius-md)] bg-[var(--color-neutral-10)] p-3">
                       {check.check_id === "resource_principal" ? (
                         <p className="text-xs text-[var(--color-neutral-60)]">
@@ -205,9 +274,29 @@ export function Permissions() {
                             className="text-sm text-[var(--color-link)] underline"
                             onClick={() => setCredFormOpen((v) => !v)}
                           >
-                            방법 B: API 서명 키 credential 폼 {credFormOpen ? "닫기 ▴" : "열기 ▾"}
+                            방법 B: API 서명 키(User Principal) credential 폼{" "}
+                            {credFormOpen ? "닫기 ▴" : "열기 ▾"}
                           </button>
                           {credFormOpen ? (
+                            <>
+                              {ociDefaults?.available ? (
+                                <div className="mt-2 flex flex-wrap items-center gap-2 rounded-[var(--radius-sm)] bg-[var(--color-info-tint)] p-2 text-xs">
+                                  <StatusBadge status="info">~/.oci 기본값 적용됨</StatusBadge>
+                                  <span className="text-[var(--color-neutral-70)]">
+                                    config·api-key.pem에서 user/tenancy/fingerprint/private_key를 채웠습니다.
+                                  </span>
+                                  <button
+                                    className="text-[var(--color-link)] underline"
+                                    onClick={() => applyOciDefaults(ociDefaults)}
+                                  >
+                                    다시 채우기
+                                  </button>
+                                </div>
+                              ) : (
+                                <p className="mt-2 text-xs text-[var(--color-neutral-60)]">
+                                  ~/.oci/config가 없어 기본값을 채우지 않았습니다. 직접 입력하세요.
+                                </p>
+                              )}
                             <div className="mt-2 grid grid-cols-2 gap-3">
                               <Field
                                 id="cred-name"
@@ -250,6 +339,7 @@ export function Permissions() {
                                 </p>
                               </div>
                             </div>
+                            </>
                           ) : null}
                         </div>
                       ) : null}
@@ -260,6 +350,30 @@ export function Permissions() {
                           loading={applyMutation.isPending}
                         >
                           적용
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* 통과 항목 중 제거 가능(resource_principal / credential) — 해제 미리보기 + 제거 */}
+                  {check.status === "pass" && check.remove_sql ? (
+                    <div className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-danger-tint)] bg-[var(--color-neutral-0)] p-3">
+                      <p className="text-xs text-[var(--color-neutral-60)]">
+                        이 인증은 이미 설정되어 있습니다. 데모 정리/전환을 위해 제거할 수 있습니다.
+                        {check.check_id === "credential"
+                          ? ` (대상: ${cred.credential_name})`
+                          : ""}
+                      </p>
+                      <SqlBlock preview label="제거 시 실행될 SQL 보기" sql={check.remove_sql} />
+                      <div>
+                        <Button
+                          variant="danger"
+                          onClick={() => removeItem(check)}
+                          loading={applyMutation.isPending}
+                        >
+                          {check.check_id === "resource_principal"
+                            ? "Resource Principal 해제"
+                            : "User Principal(credential) 제거"}
                         </Button>
                       </div>
                     </div>

@@ -112,13 +112,19 @@ function TurnResponse({ turn }: { turn: TurnView }) {
         </p>
       )}
       {turn.result?.generated_sql ? (
-        <SqlBlock sql={turn.result.generated_sql} label="생성된 SQL 보기" defaultOpen={sqlOpen} />
+        <SqlBlock
+          sql={turn.result.generated_sql}
+          label="생성된 SQL 보기"
+          defaultOpen={sqlOpen}
+          format
+        />
       ) : null}
       {turn.executedSql && turn.executedSql.length > 0 ? (
         <SqlBlock
           sql={turn.executedSql}
           label="▸ 실행 SQL (params에 conversation_id 포함)"
           defaultOpen={sqlOpen}
+          format
         />
       ) : null}
       {turn.elapsedMs != null ? (
@@ -240,7 +246,8 @@ export function Chat() {
   });
   const profilesQuery = useQuery({
     queryKey: ["profiles"],
-    queryFn: () => getEnvelope<ProfileSummary[]>("/profiles"),
+    // 공유 키 ["profiles"] 반환 형태를 배열로 통일
+    queryFn: async () => (await getEnvelope<ProfileSummary[]>("/profiles")).data,
   });
   const defaultProfileQuery = useQuery({
     queryKey: ["settings", "default-profile"],
@@ -384,7 +391,7 @@ export function Chat() {
               onChange={(e) => setSelectedProfile(e.target.value)}
             >
               <option value="">기본{defaultProfileName ? ` (${defaultProfileName})` : ""}</option>
-              {profilesQuery.data?.data.map((profile) => (
+              {(profilesQuery.data ?? []).map((profile) => (
                 <option key={profile.profile_name} value={profile.profile_name}>
                   {profile.profile_name}
                 </option>
@@ -550,6 +557,7 @@ export function Chat() {
                           sql={compareResult.executedSql[0]}
                           label="▸ 실행 SQL (params 없음)"
                           defaultOpen={sqlOpen}
+                          format
                         />
                       ) : null}
                     </div>
@@ -564,6 +572,7 @@ export function Chat() {
                           sql={compareResult.executedSql[1]}
                           label="▸ 실행 SQL (params에 conversation_id 포함)"
                           defaultOpen={sqlOpen}
+                          format
                         />
                       ) : null}
                     </div>

@@ -94,6 +94,18 @@ function providerAttrVisible(attr: string, provider: string): boolean {
 
 const objectKey = (ref: ObjectRef) => `${ref.owner}.${ref.name ?? ""}`;
 
+/** OCI Generative AI 사용 가능 리전 (region select 채움). 그 외 리전은 고급 JSON으로 입력. */
+const GENAI_REGIONS = [
+  "us-chicago-1",
+  "us-ashburn-1",
+  "eu-frankfurt-1",
+  "uk-london-1",
+  "ap-osaka-1",
+  "ap-tokyo-1",
+  "ap-mumbai-1",
+  "sa-saopaulo-1",
+] as const;
+
 export function ProfileEditor() {
   const navigate = useNavigate();
   const { name: editName } = useParams<{ name: string }>();
@@ -125,6 +137,16 @@ export function ProfileEditor() {
     queryFn: async () => (await getEnvelope<AttributeMetaResult>("/profiles/attribute-meta")).data,
   });
 
+  // 현재 DB에서 사용 가능한 credential 목록 — credential_name select 채움 (USER_CREDENTIALS)
+  const { data: credentialsData } = useQuery({
+    queryKey: ["profiles", "credentials"],
+    queryFn: async () =>
+      (await getEnvelope<{ credentials: string[] }>("/profiles/credentials", undefined, {
+        suppressErrorToast: true,
+      })).data,
+  });
+  const credentialNames = credentialsData?.credentials ?? [];
+
   // 편집 모드 — 기존 속성 프리필 (GET /profiles/{name}, api-spec §4.5)
   const { data: existing } = useQuery({
     queryKey: ["profiles", editName],
@@ -132,6 +154,27 @@ export function ProfileEditor() {
       (await getEnvelope<ProfileDetailData>(`/profiles/${encodeURIComponent(editName!)}`)).data,
     enabled: isEdit,
   });
+
+  // 편집 모드 — 현재 저장된 프로파일 정의(현재 설정)를 코드로 표시 (읽기 전용)
+  const currentCode = useMemo(() => {
+    if (!existing) return null;
+    const fmt = (v: string) => {
+      const t = v.trim();
+      if (t.startsWith("[") || t.startsWith("{")) {
+        try {
+          return JSON.stringify(JSON.parse(t));
+        } catch {
+          /* JSON 아니면 문자열로 */
+        }
+      }
+      return JSON.stringify(v);
+    };
+    const body = existing.attributes
+      .filter((a) => a.value != null && a.value !== "")
+      .map((a) => `  "${a.name}": ${fmt(a.value as string)}`)
+      .join(",\n");
+    return `-- 현재 저장된 프로파일: ${existing.profile_name} (상태: ${existing.status})\n{\n${body}\n}`;
+  }, [existing]);
 
   // 스키마 브라우저 — 인증 사용자가 DB에서 볼 수 있는 것만 (ALL_* 뷰, api-spec §8)
   const { data: ownersResult } = useQuery({
@@ -301,7 +344,36 @@ export function ProfileEditor() {
         "h-9 rounded-[var(--radius-sm)] border border-[var(--color-neutral-40)] bg-[var(--color-neutral-0)] px-2 text-sm",
     };
     let control: ReactNode;
-    if (BOOLEAN_ATTRS.has(name)) {
+    if (name === "region") {
+      // OCI Generative AI 사용 가능 리전 select. 현재 값이 목록 밖이면 보존 옵션으로 추가.
+      const options = Array.from(new Set([...GENAI_REGIONS, ...(value ? [value] : [])]));
+      control = (
+        <select {...common} value={value} onChange={(e) => setValue(name, e.target.value)}>
+          <option value="">(미지정 — 기본 us-chicago-1)</option>
+          {options.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+      );
+    } else if (name === "credential_name") {
+      // 현재 DB에서 사용 가능한 credential 목록을 select로 제공 (권한 점검에서 생성한 자격증명 포함).
+      // 현재 값이 목록에 없으면(편집 중 등) 보존 옵션으로 추가, 직접 입력 옵션도 제공.
+      const options = Array.from(
+        new Set([...credentialNames, ...(value ? [value] : [])]),
+      );
+      control = (
+        <select {...common} value={value} onChange={(e) => setValue(name, e.target.value)}>
+          <option value="">(미지정)</option>
+          {options.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+      );
+    } else if (BOOLEAN_ATTRS.has(name)) {
       control = (
         <div className="flex h-9 items-center gap-4 text-sm" onFocus={() => setFocusedAttr(name)}>
           {["", "false", "true"].map((opt) => (
@@ -501,10 +573,37 @@ export function ProfileEditor() {
                 </>
               )}
 
+              {/* 선택된 대상 객체 목록 — 칩(스키마 무관 전체 표시, 편집 모드 기존 선택 포함) */}
+              {selectedObjects.length > 0 ? (
+                <div className="mt-2 flex flex-col gap-1">
+                  <span className="text-xs font-medium text-[var(--color-neutral-70)]">
+                    선택된 대상 테이블 ({selectedObjects.length})
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedObjects.map((ref) => (
+                      <span
+                        key={objectKey(ref)}
+                        className="inline-flex items-center gap-1 rounded-full bg-[var(--color-info-tint)] px-2 py-0.5 text-xs font-mono"
+                      >
+                        {ref.name ? `${ref.owner}.${ref.name}` : `${ref.owner} (스키마 전체)`}
+                        <button
+                          type="button"
+                          aria-label={`${objectKey(ref)} 제거`}
+                          className="text-[var(--color-danger)]"
+                          onClick={() => toggleObject(ref)}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               {/* 선택 요약 + 미선택 안내 */}
               <p className="mt-2 text-xs text-[var(--color-neutral-60)]">
                 {selectedObjects.length > 0
-                  ? `선택 ${selectedObjects.length}개 — 여러 스키마의 테이블을 섞어 담을 수 있습니다.`
+                  ? "여러 스키마의 테이블을 섞어 담을 수 있습니다. 칩의 ×로 제거합니다."
                   : "아무것도 선택하지 않으면 object_list를 생략합니다 → 현재 스키마 전체가 자동 선택됩니다 (가이드 p78·p151). 테이블을 좁힐수록 정확도가 올라갑니다."}
               </p>
 
@@ -590,6 +689,15 @@ export function ProfileEditor() {
               <p>필드를 클릭하거나 포커스하면 해당 속성의 한국어 해설이 여기에 표시됩니다.</p>
             )}
           </Panel>
+
+          {isEdit && currentCode ? (
+            <Panel title="▣ 현재 프로파일 정의 (저장된 설정)">
+              <SqlBlock defaultOpen sql={currentCode} label="현재 프로파일의 저장된 속성 코드" />
+              <p className="mt-2 text-xs text-[var(--color-neutral-60)]">
+                아래 [CREATE_PROFILE 미리보기]는 편집한 값으로 적용될 정의입니다.
+              </p>
+            </Panel>
+          ) : null}
 
           <Panel
             title={

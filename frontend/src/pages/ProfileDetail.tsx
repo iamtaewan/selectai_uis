@@ -6,7 +6,7 @@
  * 속성명/현재값 표 + 행 선택 시 한국어 해설 패널 동기화, [편집] → PG-03a,
  * [기본 프로파일로 지정] = PUT /settings/default-profile (앱 설정 — DB 호출 없음, §4.8).
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -68,6 +68,27 @@ export function ProfileDetail() {
 
   const detailError = error instanceof ApiError ? error.body : null;
 
+  // 현재 저장된 프로파일 정의를 코드로 (이미 만들어진 프로파일의 현재 설정)
+  const currentCode = useMemo(() => {
+    if (!detail) return null;
+    const fmt = (v: string) => {
+      const t = v.trim();
+      if (t.startsWith("[") || t.startsWith("{")) {
+        try {
+          return JSON.stringify(JSON.parse(t));
+        } catch {
+          /* JSON 아니면 문자열로 */
+        }
+      }
+      return JSON.stringify(v);
+    };
+    const body = detail.attributes
+      .filter((a) => a.value != null && a.value !== "")
+      .map((a) => `  "${a.name}": ${fmt(a.value as string)}`)
+      .join(",\n");
+    return `-- 현재 저장된 프로파일: ${detail.profile_name} (상태: ${detail.status})\n{\n${body}\n}`;
+  }, [detail]);
+
   return (
     <div className="flex flex-col gap-6">
       {/* 헤더 — 이름/상태 + 액션 */}
@@ -105,6 +126,13 @@ export function ProfileDetail() {
           </Button>
         </div>
       </div>
+
+      {/* 현재 프로파일 코드 — 이미 만들어진 프로파일의 저장된 설정을 코드로 표시 */}
+      {currentCode ? (
+        <Panel title="▣ 현재 프로파일 코드 (저장된 설정)">
+          <SqlBlock defaultOpen sql={currentCode} label="현재 프로파일의 저장된 속성 코드" />
+        </Panel>
+      ) : null}
 
       {/* 학습 메모 — showparameter 액션은 존재하지 않음 (design.md PG-03b / 레퍼런스 §1) */}
       <Panel variant="explain" title="▣ 학습 메모">

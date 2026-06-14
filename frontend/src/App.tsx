@@ -11,12 +11,15 @@ import ChatHistory from "./pages/ChatHistory";
 import Connections from "./pages/Connections";
 import Dashboard from "./pages/Dashboard";
 import Enrichment from "./pages/Enrichment";
+import Feedback from "./pages/Feedback";
+import MetaEnrich from "./pages/MetaEnrich";
 import Onboarding from "./pages/Onboarding";
 import Permissions from "./pages/Permissions";
 import Playground from "./pages/Playground";
 import ProfileDetail from "./pages/ProfileDetail";
 import ProfileEditor from "./pages/ProfileEditor";
 import Profiles from "./pages/Profiles";
+import SchemaClone from "./pages/SchemaClone";
 import SettingsPage from "./pages/SettingsPage";
 
 const queryClient = new QueryClient({
@@ -39,11 +42,14 @@ export function App() {
             <Route path="/" element={<Onboarding />} />
             <Route path="/connections" element={<Connections />} />
             <Route path="/permissions" element={<Permissions />} />
+            <Route path="/clone" element={<SchemaClone />} />
             <Route path="/profiles" element={<Profiles />} />
             <Route path="/profiles/new" element={<ProfileEditor />} />
             <Route path="/profiles/:name/edit" element={<ProfileEditor />} />
             <Route path="/profiles/:name" element={<ProfileDetail />} />
+            <Route path="/meta" element={<MetaEnrich />} />
             <Route path="/playground" element={<Playground />} />
+            <Route path="/feedback" element={<Feedback />} />
             <Route path="/chat" element={<Chat />} />
             <Route path="/chat/history" element={<ChatHistory />} />
             <Route path="/enrichment" element={<Enrichment />} />

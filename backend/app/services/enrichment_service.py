@@ -44,12 +44,21 @@ GET_TAB_COMMENTS_ALL_SQL = (
     "AND table_name IN (SELECT table_name FROM ALL_TABLES WHERE owner = :owner) "
     "ORDER BY table_name"
 )
+# 전체(owner) 컬럼 코멘트 단일 벌크 — 테이블별 N+1 쿼리 회피 (DPY-4024 방지)
+GET_COL_COMMENTS_ALL_SQL = (
+    "SELECT col.table_name, col.column_name, cc.comments, col.data_type "
+    "FROM ALL_TAB_COLUMNS col LEFT JOIN ALL_COL_COMMENTS cc "
+    "ON cc.owner = col.owner AND cc.table_name = col.table_name "
+    "AND cc.column_name = col.column_name "
+    "WHERE col.owner = :owner ORDER BY col.table_name, col.column_id"
+)
+# 단일 테이블 컬럼 — LEFT JOIN으로 코멘트 없는 컬럼도 모두 포함(증강 데모에서 코멘트 추가용)
 GET_COL_COMMENTS_SQL = (
-    "SELECT c.table_name, c.column_name, c.comments, col.data_type "
-    "FROM ALL_COL_COMMENTS c "
-    "JOIN ALL_TAB_COLUMNS col ON col.owner = c.owner "
-    "AND col.table_name = c.table_name AND col.column_name = c.column_name "
-    "WHERE c.owner = :owner AND c.table_name = :table_name "
+    "SELECT col.table_name, col.column_name, cc.comments, col.data_type "
+    "FROM ALL_TAB_COLUMNS col LEFT JOIN ALL_COL_COMMENTS cc "
+    "ON cc.owner = col.owner AND cc.table_name = col.table_name "
+    "AND cc.column_name = col.column_name "
+    "WHERE col.owner = :owner AND col.table_name = :table_name "
     "ORDER BY col.column_id"
 )
 
@@ -158,40 +167,48 @@ async def get_comments(
     """§7.2 코멘트 조회 — 테이블 코멘트 + 컬럼별 코멘트(타입 포함)."""
     common.validate_identifier(owner, "스키마 이름")
     owner_upper = owner.upper()
-    tables: list[dict[str, Any]] = []
+    if table:
+        common.validate_identifier(table, "테이블 이름")
+    # 데이터 딕셔너리 조회는 ADB에서 느릴 수 있어 넉넉한 타임아웃 사용 (DPY-4024 방지)
     async with pool_registry.acquire(
-        connection_id, pool_registry.CALL_TIMEOUT_DEFAULT_MS
+        connection_id, pool_registry.CALL_TIMEOUT_PRIVILEGE_MS
     ) as conn:
         if table:
-            common.validate_identifier(table, "테이블 이름")
             _, tab_rows = await oracle.fetch_all(
                 conn, GET_TAB_COMMENT_SQL,
+                {"owner": owner_upper, "table_name": table.upper()}, recorder=recorder,
+            )
+            _, col_rows = await oracle.fetch_all(
+                conn, GET_COL_COMMENTS_SQL,
                 {"owner": owner_upper, "table_name": table.upper()}, recorder=recorder,
             )
         else:
             _, tab_rows = await oracle.fetch_all(
                 conn, GET_TAB_COMMENTS_ALL_SQL, {"owner": owner_upper}, recorder=recorder
             )
-        for table_name, table_comment in tab_rows:
+            # 테이블별 N+1 대신 owner 전체 컬럼 코멘트를 단일 쿼리로
             _, col_rows = await oracle.fetch_all(
-                conn, GET_COL_COMMENTS_SQL,
-                {"owner": owner_upper, "table_name": str(table_name)}, recorder=recorder,
+                conn, GET_COL_COMMENTS_ALL_SQL, {"owner": owner_upper}, recorder=recorder
             )
-            tables.append(
-                {
-                    "owner": owner_upper,
-                    "table_name": str(table_name),
-                    "comment": table_comment,
-                    "columns": [
-                        {
-                            "column_name": str(column_name),
-                            "data_type": str(data_type),
-                            "comment": col_comment,
-                        }
-                        for _, column_name, col_comment, data_type in col_rows
-                    ],
-                }
-            )
+    # 컬럼 코멘트를 테이블별로 그룹화
+    cols_by_table: dict[str, list[dict[str, Any]]] = {}
+    for table_name, column_name, col_comment, data_type in col_rows:
+        cols_by_table.setdefault(str(table_name), []).append(
+            {
+                "column_name": str(column_name),
+                "data_type": str(data_type),
+                "comment": col_comment,
+            }
+        )
+    tables = [
+        {
+            "owner": owner_upper,
+            "table_name": str(table_name),
+            "comment": table_comment,
+            "columns": cols_by_table.get(str(table_name), []),
+        }
+        for table_name, table_comment in tab_rows
+    ]
     return {"owner": owner_upper, "tables": tables}
 
 

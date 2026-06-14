@@ -132,10 +132,62 @@ ORA_ERROR_MAP: dict[str, OraMapping] = {
     "ORA-20404": OraMapping(
         "PROFILE_NOT_FOUND", 404, "지정한 프로파일이 존재하지 않습니다.",
     ),
+    "ORA-11552": OraMapping(
+        "ANNOTATION_EXISTS", 409, "어노테이션이 이미 존재합니다 (ADD 대신 REPLACE로 갱신해야 합니다).",
+        retryable=True,
+    ),
+    "ORA-11560": OraMapping(
+        "ANNOTATION_EXISTS", 409, "컬럼 어노테이션이 이미 존재합니다 (ADD 대신 REPLACE로 갱신해야 합니다).",
+        retryable=True,
+    ),
+    "ORA-11553": OraMapping(
+        "ANNOTATION_MISSING", 409, "어노테이션이 존재하지 않습니다 (REPLACE 대신 ADD로 추가해야 합니다).",
+        retryable=True,
+    ),
+    "ORA-11561": OraMapping(
+        "ANNOTATION_MISSING", 409, "컬럼 어노테이션이 존재하지 않습니다 (REPLACE 대신 ADD로 추가해야 합니다).",
+        retryable=True,
+    ),
+    "ORA-01002": OraMapping(
+        "DB_CONNECTION_UNSTABLE", 503,
+        "DB 세션이 일시적으로 불안정합니다 (fetch out of sequence). 다시 시도하세요.",
+        retryable=True,
+        hint_ko="GENERATE 내부 커밋이나 풀 세션 상태 영향일 수 있어, 새 커넥션으로 재시도하면 대개 해소됩니다.",
+    ),
     "DPY-4011": OraMapping(
         "LLM_TIMEOUT", 504, "AI 응답이 제한 시간을 초과했습니다. 다시 시도하세요.", retryable=True,
     ),
+    "DPY-4024": OraMapping(
+        "QUERY_TIMEOUT", 504,
+        "쿼리 시간이 초과되었습니다. 대형 스키마(예: ADMIN) 조회는 느릴 수 있습니다.",
+        retryable=True,
+        hint_ko="잠시 후 다시 시도하거나, 대상 스키마를 더 좁혀 선택하세요.",
+    ),
 }
+
+# ORA-20000은 DBMS_CLOUD_AI가 RAISE_APPLICATION_ERROR로 던지는 범용 코드라
+# 메시지 본문으로 의미를 분기한다 (데이터 액세스 vs 피드백 매칭 실패 등).
+ORA20000_VARIANTS: list[tuple[str, OraMapping]] = [
+    ("Data access is disabled", OraMapping(
+        "DATA_ACCESS_DISABLED", 409,
+        "Select AI의 데이터 액세스가 비활성화되어 있어 narrate/합성 데이터를 실행할 수 없습니다.",
+        hint_ko="권한 점검 화면에서 'Data Access 활성화' 버튼을 눌러 ENABLE_DATA_ACCESS를 적용한 뒤 다시 시도하세요.",
+        docs_ref="selectai-reference.md §2 데이터 액세스 제어 (p174-176)",
+    )),
+    ("is not a Select AI statement", OraMapping(
+        "FEEDBACK_INVALID_STATEMENT", 422,
+        "피드백 대상 SQL 텍스트가 Select AI 문장 형식이 아닙니다 ('select ai <액션> <프롬프트>' 필요).",
+        hint_ko="백엔드가 자동으로 'select ai showsql <프롬프트>' 형식으로 변환합니다 — 재시도하세요.",
+        docs_ref="selectai-reference.md §FEEDBACK (p104)",
+    )),
+    ("No matching SQL statement found", OraMapping(
+        "FEEDBACK_NO_MATCH", 422,
+        "해당 프롬프트로 실제 실행된 SQL을 찾지 못해 긍정 피드백을 기록할 수 없습니다.",
+        hint_ko="긍정 피드백은 같은 질문을 한 번 실행해 SQL 매핑이 생성된 뒤에 가능합니다. "
+        "부정(교정) 피드백은 교정 SQL만 있으면 즉시 기록됩니다.",
+        docs_ref="selectai-reference.md §FEEDBACK 긍정 피드백 (p105)",
+    )),
+]
 
 _ORA_CODE_RE = re.compile(r"\b((?:ORA|DPY)-\d{4,5})\b")
 
@@ -156,6 +208,12 @@ def map_oracle_error(message: str, executed_sql: list[str] | None = None) -> App
     """oracledb.DatabaseError 메시지를 §1.5 매핑 표 기준 AppError로 변환."""
     code = extract_top_error_code(message)
     mapping = ORA_ERROR_MAP.get(code or "")
+    if code == "ORA-20000":
+        # 메시지 본문으로 변형을 식별 — 일치 항목이 없으면 기존 데이터 액세스 매핑으로 폴백.
+        for needle, variant in ORA20000_VARIANTS:
+            if needle in message:
+                mapping = variant
+                break
     if mapping is None:
         return AppError(
             status_code=500,

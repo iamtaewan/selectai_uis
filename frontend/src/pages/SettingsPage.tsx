@@ -39,7 +39,10 @@ export function SettingsPage() {
   // ── 1. 기본 프로파일 ──────────────────────────
   const profilesQuery = useQuery({
     queryKey: ["profiles"],
-    queryFn: () => getEnvelope<ProfileSummary[]>("/profiles", undefined, { suppressErrorToast: true }),
+    // 공유 키 ["profiles"]의 반환 형태를 배열로 통일 (Profiles/Playground/Chat와 일치)
+    queryFn: async () =>
+      (await getEnvelope<ProfileSummary[]>("/profiles", undefined, { suppressErrorToast: true }))
+        .data,
   });
   const defaultQuery = useQuery({
     queryKey: ["settings", "default-profile"],
@@ -119,7 +122,7 @@ export function SettingsPage() {
     },
   });
 
-  const profiles = profilesQuery.data?.data ?? [];
+  const profiles = Array.isArray(profilesQuery.data) ? profilesQuery.data : [];
   const currentDefault = defaultQuery.data?.data.profile_name ?? null;
   const ledgerItems = resourcesQuery.data?.data.items ?? [];
 

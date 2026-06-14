@@ -58,6 +58,24 @@ def _raise_mapped(exc: oracledb.Error, recorder: SqlRecorder | None) -> None:
     raise map_oracle_error(str(exc), executed) from exc
 
 
+def _raise_unstable(exc: Exception, recorder: SqlRecorder | None) -> None:
+    """비-oracledb 예외(끊긴 풀 커넥션 등 driver 내부 오류) → 깔끔한 재시도 오류.
+
+    예: stale 커넥션에서 async execute가 oracledb.Error가 아닌 TypeError
+    ('NoneType' object is not iterable)를 던지는 경우 — 500 대신 재시도 안내.
+    """
+    raise AppError(
+        status_code=503,
+        code="DB_CONNECTION_UNSTABLE",
+        app_code="DB_CONNECTION_UNSTABLE",
+        message_ko="DB 연결이 일시적으로 불안정합니다. 잠시 후 다시 시도하세요.",
+        hint_ko="끊긴 커넥션이 감지되면 재시도 시 새 커넥션으로 자동 복구됩니다.",
+        detail=str(exc),
+        retryable=True,
+        executed_sql=recorder.statements if recorder else [],
+    ) from exc
+
+
 async def execute(
     conn: Any,
     sql: str,
@@ -72,6 +90,10 @@ async def execute(
         await cursor.execute(sql, binds or {})
     except oracledb.Error as exc:
         _raise_mapped(exc, recorder)
+    except AppError:
+        raise
+    except Exception as exc:  # 끊긴 커넥션 등 driver 내부 오류 → 재시도 안내
+        _raise_unstable(exc, recorder)
     finally:
         cursor.close()
 
@@ -98,6 +120,11 @@ async def fetch_all(
     except oracledb.Error as exc:
         _raise_mapped(exc, recorder)
         raise  # 도달 불가 — 타입 체커용
+    except AppError:
+        raise
+    except Exception as exc:
+        _raise_unstable(exc, recorder)
+        raise
     finally:
         cursor.close()
 
@@ -118,6 +145,11 @@ async def fetch_one(
         return list(row) if row is not None else None
     except oracledb.Error as exc:
         _raise_mapped(exc, recorder)
+        raise
+    except AppError:
+        raise
+    except Exception as exc:
+        _raise_unstable(exc, recorder)
         raise
     finally:
         cursor.close()

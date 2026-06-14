@@ -57,10 +57,12 @@ export function Connections() {
   const { activeConnectionId, setActiveConnection } = useConnectionStore();
 
   // ---------------------------------------------------------------- 목록
-  const { data: connections, isLoading: listLoading } = useQuery({
+  const { data: connectionsData, isLoading: listLoading } = useQuery({
     queryKey: ["connections"],
     queryFn: async () => (await getEnvelope<ConnectionOut[]>("/connections")).data,
   });
+  // 방어: 공유 캐시(AppShell)와 형태가 어긋나도 항상 배열로 다룬다.
+  const connections = Array.isArray(connectionsData) ? connectionsData : [];
 
   // 행별 테스트 결과 (커넥션 ID → 진단 결과)
   const [testResults, setTestResults] = useState<Record<string, ConnectionTestResult>>({});
@@ -88,6 +90,8 @@ export function Connections() {
 
   // ②/③ 입력
   const [tnsAlias, setTnsAlias] = useState("");
+  // ADB wallet 다운로드 시 설정한 암호 — 암호화된 ewallet.pem(thin 모드 mTLS) 해제에 필요
+  const [walletPw, setWalletPw] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [connName, setConnName] = useState("");
@@ -98,7 +102,8 @@ export function Connections() {
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
-      // wallet zip은 multipart/form-data — 공유 인터셉터(executed_sql 누적)는 그대로 동작
+      // wallet zip은 multipart/form-data — 공유 인터셉터(executed_sql 누적)는 그대로 동작.
+      // wallet 암호는 업로드가 아니라 ② 단계(자격 입력)에서 받아 커넥션 생성 시 전달한다.
       const form = new FormData();
       form.append("file", file);
       const res = await api.post<{ data: WalletUploadResult }>("/connections/wallet", form, {
@@ -193,6 +198,7 @@ export function Connections() {
         tns_alias: tnsAlias,
         username: "admin",
         password,
+        wallet_password: walletPw || undefined,
         validate: true,
       });
       return envelope.data;
@@ -206,6 +212,7 @@ export function Connections() {
   const resetWizard = () => {
     setWalletResult(null);
     setTnsAlias("");
+    setWalletPw("");
     setPassword("");
     setConnName("");
     setCandidates(null);
@@ -458,6 +465,19 @@ export function Connections() {
                       ) : null}
                     </label>
                   ))}
+                </div>
+                {/* Wallet 암호 — admin 자격 위에 배치 (암호화된 ewallet.pem 해제에 필요) */}
+                <div className="mt-3">
+                  <Field
+                    id="wallet-pw"
+                    label="Wallet 암호"
+                    type="password"
+                    value={walletPw}
+                    onChange={(e) => setWalletPw(e.target.value)}
+                    autoComplete="off"
+                    placeholder="ADB wallet 다운로드 시 설정한 암호"
+                    helpKo="암호 보호된 wallet(ewallet.pem)은 필수입니다. auto-login(cwallet.sso) wallet이면 비워둘 수 있습니다."
+                  />
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-3">
                   <Field id="db-user" label="사용자" value="admin" readOnly helpKo="v1에서는 admin 고정입니다." />

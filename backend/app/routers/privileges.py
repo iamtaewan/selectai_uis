@@ -1,8 +1,9 @@
 """권한 점검 라우터 — /api/v1/privileges (FR-03 / api-spec §3).
 
 엔드포인트 (인덱스 #7, #8):
-- GET  /privileges/check  권한 사전 점검 (fix_sql 미리보기 포함)
-- POST /privileges/apply  원클릭 적용 + 자동 재점검
+- GET  /privileges/check         권한 사전 점검 (fix_sql/remove_sql 미리보기 포함)
+- POST /privileges/apply         원클릭 적용/제거(operation) + 자동 재점검
+- GET  /privileges/oci-defaults  ~/.oci/config 기반 User Principal 폼 기본값
 
 대상 커넥션은 X-Connection-Id 헤더 (api-spec §1.2).
 """
@@ -11,10 +12,21 @@ from __future__ import annotations
 from fastapi import APIRouter, Header, Query
 
 from app.db import oracle
-from app.schemas.models import Envelope, PrivilegeApplyRequest
+from app.schemas.models import Envelope, OciCliDefaults, PrivilegeApplyRequest
 from app.services import common, prereq_service
 
 router = APIRouter(prefix="/privileges", tags=["privileges"])
+
+
+@router.get("/oci-defaults", response_model=Envelope)
+async def oci_defaults() -> Envelope:
+    """~/.oci/config + key_file 기반 User Principal(API 서명 키) 폼 기본값.
+
+    DB 비의존 — 로컬 파일만 읽는다. config 없으면 available=False.
+    """
+    started = common.start_timer()
+    data = OciCliDefaults(**prereq_service.read_oci_cli_defaults())
+    return common.make_envelope(data, [], started)
 
 
 @router.get("/check", response_model=Envelope)

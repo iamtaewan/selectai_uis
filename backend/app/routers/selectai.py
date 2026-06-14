@@ -67,3 +67,43 @@ async def suggested_prompts() -> Envelope:
     """§5.4 추천 프롬프트 (canned, SH 스키마 검증 예제) — 정적."""
     started = common.start_timer()
     return common.make_envelope(selectai_service.SUGGESTED_PROMPTS, [], started)
+
+
+@router.get("/feedback/list", response_model=Envelope)
+async def feedback_list(
+    profile_name: str,
+    prompt: str | None = None,
+    x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
+) -> Envelope:
+    """프로파일에 저장된 피드백 목록 조회 — 적용 여부 명시적 검증(데이터 출력)."""
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    data = await selectai_service.list_feedback(
+        connection_id, profile_name, recorder, prompt=prompt
+    )
+    return common.make_envelope(data, recorder.statements, started)
+
+
+@router.get("/feedback/privilege-check", response_model=Envelope)
+async def feedback_privilege_check(
+    x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
+) -> Envelope:
+    """피드백(sql_id 경로) 권한 점검 — V_$MAPPED_SQL/V_$SESSION READ 보유·부여 가능 여부."""
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    data = await selectai_service.check_feedback_privileges(connection_id, recorder)
+    return common.make_envelope(data, recorder.statements, started)
+
+
+@router.post("/feedback/grant", response_model=Envelope)
+async def feedback_grant(
+    x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
+) -> Envelope:
+    """누락된 feedback 권한(READ on SYS.V_$MAPPED_SQL/V_$SESSION) 부여 시도."""
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    data = await selectai_service.grant_feedback_privileges(connection_id, recorder)
+    return common.make_envelope(data, recorder.statements, started)

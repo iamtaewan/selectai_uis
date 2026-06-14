@@ -57,6 +57,13 @@ SQL_FEEDBACK_GRANTS = (
 FIX_RESOURCE_PRINCIPAL = (
     "BEGIN\n  DBMS_CLOUD_ADMIN.ENABLE_PRINCIPAL_AUTH(provider => 'OCI');\nEND;"
 )
+# 제거(해제) PL/SQL — Resource Principal / User Principal(credential)
+REMOVE_RESOURCE_PRINCIPAL = (
+    "BEGIN\n  DBMS_CLOUD_ADMIN.DISABLE_PRINCIPAL_AUTH(provider => 'OCI');\nEND;"
+)
+DROP_CREDENTIAL_SQL = (
+    "BEGIN\n  DBMS_CLOUD.DROP_CREDENTIAL(credential_name => :credential_name);\nEND;"
+)
 FIX_ENABLE_DATA_ACCESS = "BEGIN DBMS_CLOUD_AI.ENABLE_DATA_ACCESS; END;"
 FIX_DISABLE_DATA_ACCESS = "BEGIN DBMS_CLOUD_AI.DISABLE_DATA_ACCESS; END;"
 
@@ -104,6 +111,7 @@ def _check(
     *,
     evidence_sql: str | None = None,
     fix_sql: str | None = None,
+    remove_sql: str | None = None,
     docs_ref: str | None = None,
 ) -> PrivilegeCheck:
     return PrivilegeCheck(
@@ -113,6 +121,7 @@ def _check(
         description_ko=description_ko,
         evidence_sql=evidence_sql,
         fix_sql=fix_sql,
+        remove_sql=remove_sql,
         docs_ref=docs_ref,
     )
 
@@ -169,12 +178,13 @@ async def run_checks(
             conn, SQL_CREDENTIALS, {"owner": grantee}, recorder=recorder
         )
         checks.append(_check(
-            "credential", "AI 공급자 자격증명",
+            "credential", "AI 공급자 자격증명 (User Principal)",
             "pass" if cred_rows else "fail",
             "AI 공급자 접근용 자격증명(DBMS_CLOUD.CREATE_CREDENTIAL)이 필요합니다. "
             "OCI GenAI는 Resource Principal로 대체할 수 있습니다.",
             evidence_sql=SQL_CREDENTIALS,
             fix_sql=CREATE_CREDENTIAL_API_KEY_SQL,
+            remove_sql=DROP_CREDENTIAL_SQL,
             docs_ref="selectai-reference.md §4.3 (p36)",
         ))
 
@@ -188,6 +198,7 @@ async def run_checks(
             "자격증명 키 없이 OCI GenAI를 호출하려면 Resource Principal을 활성화해야 합니다.",
             evidence_sql=SQL_RESOURCE_PRINCIPAL,
             fix_sql=FIX_RESOURCE_PRINCIPAL,
+            remove_sql=REMOVE_RESOURCE_PRINCIPAL,
             docs_ref="selectai-reference.md §4.4 (p81)",
         ))
 
@@ -370,6 +381,101 @@ async def apply_items(
     return result
 
 
+async def _remove_one(
+    connection_id: str, item: Any, recorder: oracle.SqlRecorder
+) -> str:
+    """Resource Principal / credential 제거(해제). 표시문 반환."""
+    check_id = item.check_id
+
+    if check_id == "resource_principal":
+        recorder.record(REMOVE_RESOURCE_PRINCIPAL)
+        async with pool_registry.acquire(
+            connection_id, pool_registry.CALL_TIMEOUT_PRIVILEGE_MS
+        ) as conn:
+            await common.call_db(oracle.execute(conn, REMOVE_RESOURCE_PRINCIPAL), recorder)
+        return REMOVE_RESOURCE_PRINCIPAL
+
+    if check_id == "credential":
+        # 제거 대상 이름 — credential_name(우선) 또는 credential.credential_name
+        cred_name = item.credential_name or (
+            item.credential.credential_name if item.credential else None
+        )
+        if not cred_name:
+            raise AppError(
+                status_code=400,
+                code="CREDENTIAL_NAME_REQUIRED",
+                app_code="CREDENTIAL_NAME_REQUIRED",
+                message_ko="제거할 credential 이름이 필요합니다.",
+            )
+        common.validate_identifier(cred_name, "자격증명 이름")
+        binds = {"credential_name": cred_name.upper()}
+        display = (
+            f"BEGIN DBMS_CLOUD.DROP_CREDENTIAL(credential_name => '{cred_name.upper()}'); END;"
+        )
+        recorder.record(display)
+        async with pool_registry.acquire(
+            connection_id, pool_registry.CALL_TIMEOUT_PRIVILEGE_MS
+        ) as conn:
+            await common.call_db(oracle.execute(conn, DROP_CREDENTIAL_SQL, binds), recorder)
+        return display
+
+    raise AppError(
+        status_code=400,
+        code="REMOVE_NOT_SUPPORTED",
+        app_code="REMOVE_NOT_SUPPORTED",
+        message_ko=f"'{check_id}' 항목은 제거를 지원하지 않습니다.",
+    )
+
+
+def read_oci_cli_defaults() -> dict[str, Any]:
+    """~/.oci/config([DEFAULT]) + key_file에서 User Principal 기본값을 읽는다.
+
+    config가 없으면 available=False (폼 기본값 생략). private_key는 로컬 데모 한정 제공.
+    """
+    import configparser
+    from pathlib import Path
+
+    config_path = Path.home() / ".oci" / "config"
+    if not config_path.is_file():
+        return {"available": False}
+
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(config_path)
+    except configparser.Error:
+        return {"available": False}
+
+    section = "DEFAULT" if parser.has_section("DEFAULT") or parser.defaults() else None
+    if section is None:
+        # 첫 번째 섹션으로 폴백
+        names = parser.sections()
+        if not names:
+            return {"available": False}
+        section = names[0]
+    data = parser[section]
+
+    # key_file 경로 해석 (~ 확장). 미지정 시 ~/.oci/api-key.pem 폴백
+    key_file_raw = data.get("key_file") or str(Path.home() / ".oci" / "api-key.pem")
+    key_file = str(Path(key_file_raw).expanduser())
+    private_key: str | None = None
+    key_path = Path(key_file)
+    if key_path.is_file():
+        try:
+            private_key = key_path.read_text(encoding="utf-8")
+        except OSError:
+            private_key = None
+
+    return {
+        "available": True,
+        "user_ocid": data.get("user"),
+        "tenancy_ocid": data.get("tenancy"),
+        "fingerprint": data.get("fingerprint"),
+        "region": data.get("region"),
+        "key_file": key_file,
+        "private_key": private_key,
+    }
+
+
 async def _apply_one(
     connection_id: str,
     grantee: str,
@@ -379,6 +485,10 @@ async def _apply_one(
 ) -> str:
     """항목 1건 적용 — 적용 성공 시 ledger 기록. 표시문(executed_sql 항목용) 반환."""
     check_id = item.check_id
+
+    # 제거(해제) — Resource Principal / User Principal(credential)
+    if getattr(item, "operation", "apply") == "remove":
+        return await _remove_one(connection_id, item, recorder)
 
     if check_id in ("execute_dbms_cloud_ai", "execute_dbms_cloud_pipeline"):
         package = "DBMS_CLOUD_AI" if check_id == "execute_dbms_cloud_ai" else "DBMS_CLOUD_PIPELINE"

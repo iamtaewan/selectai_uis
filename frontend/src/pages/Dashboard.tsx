@@ -186,9 +186,6 @@ export function Dashboard() {
               <Link to="/chat">
                 <Button variant="ghost">챗봇으로 →</Button>
               </Link>
-              <Link to="/enrichment">
-                <Button variant="ghost">증강 비교로 →</Button>
-              </Link>
             </div>
           </div>
         ) : null}

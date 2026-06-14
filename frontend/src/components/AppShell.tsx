@@ -2,15 +2,30 @@
  * AppShell — design.md §1.2 글로벌 셸 (헤더 56px / 사이드 네비 240px / 글로벌 푸터 상태바).
  *
  * - 헤더: 브랜드 액센트 + 제품명 / 커넥션 선택기(상태 점) / 기본 프로파일 선택기 / 건강 신호등
- * - 사이드바: 데모 여정 순서(준비하기 ①②③ → 시연하기 ④⑤⑥ → 기타).
- *   가드 레일 — 커넥션 없으면 ②~⑥ 잠금(자물쇠 + 툴팁 + 클릭 시 ①로 유도)
+ * - 사이드바: 데모 여정 순서(준비하기 → 시연하기 → 기타), 각 단계는 의미 아이콘으로 표시.
+ *   가드 레일 — 커넥션 없으면 후속 단계 잠금(자물쇠 + 툴팁 + 클릭 시 커넥션으로 유도)
  * - 푸터(상태바): SQL 투명 모드 토글 / ▣ SQL LOG (n) 토글(§5.9) / 단순|전문가 전환
  * - 콘텐츠: <Outlet/> + SqlLogTerminal 도킹 — PG-00(/)·PG-08(/settings) 제외 (design §1.3)
  * - 건강 황/적이면 시연 메뉴(④⑤⑥) 진입 시 황색 경고 배너 + 원클릭 이동 (design §1.2)
  */
 import { useEffect, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Lock } from "lucide-react";
+import {
+  Activity,
+  Bot,
+  Check,
+  DatabaseBackup,
+  LayoutDashboard,
+  Lock,
+  Plug,
+  Settings,
+  ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
+  Tags,
+  ThumbsUp,
+  type LucideIcon,
+} from "lucide-react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { getEnvelope, putEnvelope } from "../api/client";
@@ -24,23 +39,27 @@ import { ToastContainer } from "./Toast";
 
 interface NavItem {
   to: string;
-  /** 여정 순번 (①~⑥) — 기타 그룹은 없음 */
-  step?: string;
+  /** 메뉴 의미를 나타내는 라인 아이콘 (숫자 순번 대체 — 가독성 향상) */
+  icon: LucideIcon;
   label: string;
   group: "준비하기" | "시연하기" | "기타";
-  /** true면 커넥션 없을 때 잠금 (가드 레일 — ②~⑥) */
+  /** true면 커넥션 없을 때 잠금 (가드 레일) */
   requiresConnection: boolean;
 }
 
+// 여정 순서(준비 → 시연 → 기타)는 배열 정렬과 그룹명으로 유지하고,
+// 각 단계는 숫자 대신 의미에 맞는 라인 아이콘으로 표시한다.
 const NAV_ITEMS: NavItem[] = [
-  { to: "/connections", step: "①", label: "커넥션", group: "준비하기", requiresConnection: false },
-  { to: "/permissions", step: "②", label: "권한 점검", group: "준비하기", requiresConnection: true },
-  { to: "/profiles", step: "③", label: "프로파일", group: "준비하기", requiresConnection: true },
-  { to: "/playground", step: "④", label: "플레이그라운드", group: "시연하기", requiresConnection: true },
-  { to: "/chat", step: "⑤", label: "챗봇", group: "시연하기", requiresConnection: true },
-  { to: "/enrichment", step: "⑥", label: "증강 비교", group: "시연하기", requiresConnection: true },
-  { to: "/dashboard", label: "대시보드", group: "기타", requiresConnection: false },
-  { to: "/settings", label: "설정", group: "기타", requiresConnection: false },
+  { to: "/connections", icon: Plug, label: "커넥션", group: "준비하기", requiresConnection: false },
+  { to: "/permissions", icon: ShieldCheck, label: "권한 점검", group: "준비하기", requiresConnection: true },
+  { to: "/clone", icon: DatabaseBackup, label: "스키마 복제", group: "준비하기", requiresConnection: true },
+  { to: "/profiles", icon: SlidersHorizontal, label: "프로파일", group: "준비하기", requiresConnection: true },
+  { to: "/meta", icon: Tags, label: "메타 강화", group: "준비하기", requiresConnection: true },
+  { to: "/playground", icon: Sparkles, label: "플레이그라운드", group: "시연하기", requiresConnection: true },
+  { to: "/feedback", icon: ThumbsUp, label: "피드백", group: "시연하기", requiresConnection: true },
+  { to: "/chat", icon: Bot, label: "챗봇", group: "시연하기", requiresConnection: true },
+  { to: "/dashboard", icon: LayoutDashboard, label: "대시보드", group: "기타", requiresConnection: false },
+  { to: "/settings", icon: Settings, label: "설정", group: "기타", requiresConnection: false },
 ];
 
 const NAV_GROUPS: NavItem["group"][] = ["준비하기", "시연하기", "기타"];
@@ -83,10 +102,12 @@ export function AppShell({ children }: { children?: ReactNode }) {
   // ---- 셸 데이터 (백그라운드 — 오류 토스트 생략, 실패 시 빈 상태로 우아하게)
   const connectionsQuery = useQuery({
     queryKey: ["connections"],
-    queryFn: () =>
-      getEnvelope<ConnectionOut[]>("/connections", undefined, { suppressErrorToast: true }),
+    // queryKey ["connections"]를 Connections.tsx와 공유하므로 반환 형태(배열)를 반드시 일치시킨다.
+    queryFn: async () =>
+      (await getEnvelope<ConnectionOut[]>("/connections", undefined, { suppressErrorToast: true }))
+        .data,
   });
-  const connections = connectionsQuery.data?.data ?? [];
+  const connections = Array.isArray(connectionsQuery.data) ? connectionsQuery.data : [];
 
   const profilesQuery = useQuery({
     queryKey: ["profiles", activeConnectionId],
@@ -106,12 +127,17 @@ export function AppShell({ children }: { children?: ReactNode }) {
   });
   const health = healthQuery.data?.data ?? null;
 
-  // 마지막 사용 커넥션 자동 선택 — 서버가 last_used_at 내림차순 정렬 (FR-02)
+  // 커넥션 복원/자동 선택 — 목록 로드 후:
+  //  ① 영속된 activeConnectionId가 목록에 있으면 그 메타 객체를 복원(새로고침 선택 유지)
+  //  ② 없거나 사라진 id면 마지막 사용 커넥션(서버 last_used_at 내림차순) 자동 선택 (FR-02)
   useEffect(() => {
-    if (!activeConnectionId && connections.length > 0) {
-      setActiveConnection(connections[0]);
-    }
-  }, [activeConnectionId, connections, setActiveConnection]);
+    if (connections.length === 0) return;
+    if (activeConnection) return; // 이미 메타까지 복원됨
+    const persisted = activeConnectionId
+      ? connections.find((c) => c.id === activeConnectionId)
+      : null;
+    setActiveConnection(persisted ?? connections[0]);
+  }, [activeConnectionId, activeConnection, connections, setActiveConnection]);
 
   // 서버 설정의 기본 프로파일(is_default)을 스토어로 동기화
   useEffect(() => {
@@ -170,8 +196,9 @@ export function AppShell({ children }: { children?: ReactNode }) {
     <div className="flex h-screen flex-col bg-[var(--color-neutral-10)]">
       {/* ============ 글로벌 헤더 56px — 브랜드 / 커넥션·프로파일 선택기 / 건강 신호등 ============ */}
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--color-neutral-30)] bg-[var(--color-neutral-0)] px-4">
-        <span className="h-6 w-1 rounded bg-[var(--color-brand)]" aria-hidden />
-        <h1 className="text-base font-bold tracking-tight">Select AI Demo Studio</h1>
+        <img src="/oracle-logo.svg" alt="Oracle" className="h-5 w-auto" />
+        <span className="h-5 w-px bg-[var(--color-neutral-30)]" aria-hidden />
+        <h1 className="text-base font-bold tracking-tight">Select AI Studio</h1>
 
         <div className="ml-auto flex items-center gap-2">
           {/* 커넥션 선택기 + 연결 상태 점 (FR-02 마지막 사용 자동 선택) */}
@@ -259,27 +286,28 @@ export function AppShell({ children }: { children?: ReactNode }) {
         {/* ============ 사이드 네비 240px — 데모 여정 순서 + 가드 레일 ============ */}
         <nav className="w-60 shrink-0 overflow-y-auto border-r border-[var(--color-neutral-30)] bg-[var(--color-neutral-20)] p-4">
           {NAV_GROUPS.map((group) => (
-            <div key={group} className="mb-4">
-              <p className="mb-1 px-3 text-xs font-semibold tracking-[0.08em] text-[var(--color-neutral-60)]">
+            <div key={group} className="mb-5">
+              <p className="mb-1.5 px-3 text-xs font-semibold tracking-[0.08em] text-[var(--color-neutral-60)]">
                 {group}
               </p>
-              <ul className="flex flex-col gap-0.5">
+              <ul className="flex flex-col gap-1">
                 {NAV_ITEMS.filter((item) => item.group === group).map((item) => {
                   const locked = item.requiresConnection && !activeConnectionId;
                   const done = stepDone(item);
+                  const Icon = item.icon;
                   if (locked) {
                     return (
                       <li key={item.to}>
-                        {/* 잠금 — 비활성 + 자물쇠 + 툴팁, 클릭 시 ①로 유도 (design §1.2 가드 레일) */}
+                        {/* 잠금 — 비활성 + 자물쇠 + 툴팁, 클릭 시 커넥션으로 유도 (가드 레일) */}
                         <button
                           onClick={() => navigate("/connections")}
                           title="먼저 커넥션을 연결하세요"
                           aria-disabled
-                          className="flex w-full cursor-not-allowed items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-left text-sm text-[var(--color-neutral-50)]"
+                          className="flex w-full cursor-not-allowed items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-left text-[0.9375rem] text-[var(--color-neutral-50)]"
                         >
-                          <span className="w-4">{item.step}</span>
+                          <Icon size={18} className="shrink-0" aria-hidden />
                           <span className="flex-1">{item.label}</span>
-                          <Lock size={14} aria-label="잠김" />
+                          <Lock size={14} className="shrink-0" aria-label="잠김" />
                         </button>
                       </li>
                     );
@@ -289,20 +317,31 @@ export function AppShell({ children }: { children?: ReactNode }) {
                       <NavLink
                         to={item.to}
                         className={({ isActive }) =>
-                          `flex items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-sm ${
+                          `flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-[0.9375rem] ${
                             isActive
                               ? "bg-[var(--color-neutral-0)] font-semibold text-[var(--color-neutral-90)] shadow-sm"
                               : "text-[var(--color-neutral-70)] hover:bg-[var(--color-neutral-0)]"
                           }`
                         }
                       >
-                        <span className="w-4">{item.step}</span>
-                        <span className="flex-1">{item.label}</span>
-                        {done ? (
-                          <span className="text-[var(--color-success)]" aria-label="완료">
-                            ✓
-                          </span>
-                        ) : null}
+                        {({ isActive }) => (
+                          <>
+                            {/* 활성 시 아이콘만 Redwood Red로 강조 — 라벨은 잉크 유지(AA 대비) */}
+                            <Icon
+                              size={18}
+                              className={`shrink-0 ${isActive ? "text-[var(--color-brand)]" : ""}`}
+                              aria-hidden
+                            />
+                            <span className="flex-1">{item.label}</span>
+                            {done ? (
+                              <Check
+                                size={16}
+                                className="shrink-0 text-[var(--color-success)]"
+                                aria-label="완료"
+                              />
+                            ) : null}
+                          </>
+                        )}
                       </NavLink>
                     </li>
                   );

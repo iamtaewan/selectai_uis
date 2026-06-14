@@ -33,6 +33,21 @@ async def get_attribute_meta() -> Envelope:
     return common.make_envelope(attribute_catalog.attribute_meta_payload(), [], started)
 
 
+@router.get("/credentials", response_model=Envelope)
+async def list_credentials(
+    x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
+) -> Envelope:
+    """현재 DB에서 사용 가능한 credential 이름 목록 — credential_name select 채움용.
+
+    USER_CREDENTIALS의 자격증명 + (활성 시) OCI$RESOURCE_PRINCIPAL을 포함한다.
+    """
+    started = common.start_timer()
+    connection_id = common.require_connection_id(x_connection_id)
+    recorder = oracle.SqlRecorder()
+    names = await profile_service.list_credentials(connection_id, recorder)
+    return common.make_envelope({"credentials": names}, recorder.statements, started)
+
+
 @router.post("/preview", response_model=Envelope)
 async def preview_profile(
     body: ProfileCreate,
