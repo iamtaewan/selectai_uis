@@ -14,7 +14,7 @@
 
 - 스택(확정): React 프론트엔드 + Python FastAPI 백엔드 (python-oracledb thin, mTLS wallet zip 업로드 또는 OCI CLI 자동 다운로드 — FR-01 하위 기능)
 - AI 공급자 기본값(확정): OCI Generative AI (`meta.llama-3.3-70b-instruct`, `us-chicago-1`)
-- OCI 컴파트먼트(필수): `TAEWAN.KIM` / `ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq`
+- OCI 컴파트먼트(필수): `TAEWAN.KIM` / `ocid1.compartment.oc1..<your-compartment-ocid>`
 - 핵심 아키텍처 원칙: 모든 Select AI 실행은 stateless한 `DBMS_CLOUD_AI.GENERATE(prompt, profile_name, action, params)` 단일 패턴 (`SELECT AI` 키워드·`SET_PROFILE`·`SET_CONVERSATION_ID` 사용 금지)
 
 ---

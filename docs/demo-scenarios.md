@@ -250,7 +250,7 @@ CREATE TABLE table3 (c1 NUMBER, c4 VARCHAR2(100), c5 VARCHAR2(100));   -- 사용
 ### 5.1 데모 전날 (D-1)
 
 - [ ] **ADB 인스턴스 기동 상태** 확인 — Always Free/중지 정책으로 자동 stop 되었는지 OCI 콘솔에서 확인, 필요 시 Start (기동 수 분 소요)
-- [ ] **컴파트먼트/리전 확인** — 프로파일 `oci_compartment_id`가 TAEWAN.KIM OCID(`ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq`)인지, `region: us-chicago-1`인지 프로파일 상세 화면에서 확인
+- [ ] **컴파트먼트/리전 확인** — 프로파일 `oci_compartment_id`가 TAEWAN.KIM OCID(`ocid1.compartment.oc1..<your-compartment-ocid>`)인지, `region: us-chicago-1`인지 프로파일 상세 화면에서 확인
 - [ ] **모델 가용성** — 기본 모델 `meta.llama-3.3-70b-instruct`로 `chat` 액션 1회 실제 호출(deprecated/리전 미지원 변동 대비). 실패 시 모델 목록에서 대체 모델(예: `cohere.command-r-plus-08-2024`) 선택 리허설
 - [ ] **권한 점검 전 항목 녹색** — 특히 Data Access "활성" (ORA-20000 예방), Resource Principal 또는 credential 유효
 - [ ] **데모 스키마 초기화** — SH 접근 가능 여부 확인, 무비 모호 스키마는 `movie_reset.sql` 후 `movie_schema.sql`로 재생성하고 **COMMENT 제거 상태**에서 시작(전/후 비교가 처음부터 가능하도록)

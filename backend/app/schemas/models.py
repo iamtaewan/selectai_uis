@@ -10,6 +10,13 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.config import get_settings
+
+
+def _default_compartment_id() -> str:
+    """컴파트먼트 OCID 기본값 — 환경변수(DEFAULT_OCI_COMPARTMENT_ID)에서 주입(코드 하드코딩 금지)."""
+    return get_settings().default_oci_compartment_id
+
 # ---------------------------------------------------------------- 공통
 
 
@@ -49,9 +56,7 @@ class WalletGenerateRequest(BaseModel):
     """wallet 자동 다운로드 (§2.7, OCI CLI 경로)."""
     adb_name: str = Field(min_length=1, max_length=255)
     wallet_password: str = Field(repr=False)        # 다운로드 zip에 설정할 암호 — 로그 마스킹
-    compartment_id: str = (
-        "ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq"
-    )                                               # 기본: TAEWAN.KIM (CLAUDE.md 전역 규칙)
+    compartment_id: str = Field(default_factory=_default_compartment_id)  # 기본: 환경변수 주입
     oci_profile: str = "DEFAULT"                    # ~/.oci/config 프로파일
     adb_ocid: Optional[str] = None                  # 복수 매칭 후 재호출 시 지정
 
@@ -214,9 +219,7 @@ class ProfileAttributes(BaseModel):
     max_tokens: Optional[int] = None
     model: Optional[str] = "meta.llama-3.3-70b-instruct"
     region: Optional[str] = "us-chicago-1"
-    oci_compartment_id: Optional[str] = (
-        "ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq"
-    )
+    oci_compartment_id: Optional[str] = Field(default_factory=_default_compartment_id)
     oci_apiformat: Optional[Literal["GENERIC", "COHERE"]] = None
     oci_endpoint_id: Optional[str] = None
     enforce_object_list: Optional[Literal["true", "false"]] = None

@@ -27,9 +27,8 @@ import SqlBlock from "../components/SqlBlock";
 import StatusBadge from "../components/StatusBadge";
 import { useConnectionStore } from "../store/connectionStore";
 
-/** CLAUDE.md 전역 규칙 — 모든 OCI 작업 기본 컴파트먼트 (TAEWAN.KIM) */
-const DEFAULT_COMPARTMENT_ID =
-  "ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq";
+/** 기본 컴파트먼트 OCID — 빌드 환경변수(VITE_DEFAULT_COMPARTMENT_ID)에서 주입(하드코딩 금지) */
+const DEFAULT_COMPARTMENT_ID = import.meta.env.VITE_DEFAULT_COMPARTMENT_ID ?? "";
 
 /** TNS alias 레벨별 한국어 해설 (design.md PG-01 ② 단계) */
 function aliasHint(alias: string): string {

@@ -233,7 +233,7 @@ wallet zip이 없는 시연자를 위한 §2.1의 대체 경로 (FR-01 하위 �
 {
   "adb_name": "DEMOADB",
   "wallet_password": "********",
-  "compartment_id": "ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq",
+  "compartment_id": "ocid1.compartment.oc1..<your-compartment-ocid>",
   "oci_profile": "DEFAULT",
   "adb_ocid": null
 }
@@ -264,7 +264,7 @@ oci db autonomous-database generate-wallet --autonomous-database-id <adb_ocid> -
     "adb_ocid": "ocid1.autonomousdatabase.oc1..xxxx"
   },
   "executed_sql": [
-    "oci db autonomous-database list --compartment-id ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq --display-name DEMOADB --lifecycle-state AVAILABLE",
+    "oci db autonomous-database list --compartment-id ocid1.compartment.oc1..<your-compartment-ocid> --display-name DEMOADB --lifecycle-state AVAILABLE",
     "oci db autonomous-database generate-wallet --autonomous-database-id ocid1.autonomousdatabase.oc1..xxxx --file ~/.selectai/wallets/wlt_7c1e4b/wallet.zip --password ***MASKED***"
   ],
   "elapsed_ms": 23400
@@ -512,7 +512,7 @@ DB 미접속으로 동작하는 정적 메타데이터. **레퍼런스 §3에서
       "credential_name": "OCI$RESOURCE_PRINCIPAL",
       "model": "meta.llama-3.3-70b-instruct",
       "region": "us-chicago-1",
-      "oci_compartment_id": "ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq"
+      "oci_compartment_id": "ocid1.compartment.oc1..<your-compartment-ocid>"
     }
   },
   "executed_sql": [],
@@ -535,7 +535,7 @@ DB 미접속으로 동작하는 정적 메타데이터. **레퍼런스 §3에서
     "object_list": [{ "owner": "SH", "name": "customers" }, { "owner": "SH", "name": "countries" }],
     "model": "meta.llama-3.3-70b-instruct",
     "region": "us-chicago-1",
-    "oci_compartment_id": "ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq",
+    "oci_compartment_id": "ocid1.compartment.oc1..<your-compartment-ocid>",
     "comments": "true"
   },
   "extra_attributes_json": null
@@ -1215,7 +1215,7 @@ class WalletGenerateRequest(BaseModel):
     adb_name: str = Field(min_length=1, max_length=255)
     wallet_password: str = Field(repr=False)        # 다운로드 zip에 설정할 암호 — 로그 마스킹
     compartment_id: str = (
-        "ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq"
+        "ocid1.compartment.oc1..<your-compartment-ocid>"
     )                                               # 기본: TAEWAN.KIM (CLAUDE.md 전역 규칙)
     oci_profile: str = "DEFAULT"                    # ~/.oci/config 프로파일
     adb_ocid: Optional[str] = None                  # 복수 매칭 후 재호출 시 지정
@@ -1349,7 +1349,7 @@ class ProfileAttributes(BaseModel):
     model: Optional[str] = "meta.llama-3.3-70b-instruct"
     region: Optional[str] = "us-chicago-1"
     oci_compartment_id: Optional[str] = (
-        "ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq"
+        "ocid1.compartment.oc1..<your-compartment-ocid>"
     )
     oci_apiformat: Optional[Literal["GENERIC", "COHERE"]] = None
     oci_endpoint_id: Optional[str] = None

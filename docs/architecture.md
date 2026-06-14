@@ -64,7 +64,7 @@ flowchart LR
 
 - **LLM 호출은 전적으로 DB 내부에서 일어난다.** FastAPI는 OCI GenAI를 직접 호출하지 않고, ADB의 `DBMS_CLOUD_AI.GENERATE`를 SQL로 호출할 뿐이다. 따라서 백엔드에는 OCI SDK 의존성이 필요 없다. 단 하나의 예외는 **wallet 자동 다운로드(§3.1.1)** 로, 시연자 로컬에 설치된 **OCI CLI를 subprocess로 호출**한다 — 이 역시 SDK 의존성을 추가하지 않으며, CLI 미설치 시 업로드 경로로 폴백한다.
 - 앱 서버의 영속 상태는 ① wallet 파일 보관소, ② JSON 파일 3종(`connections.json` 커넥션 메타·암호화 자격, `settings.json` 앱 설정, `resources.json` 생성 리소스 대장) 두 가지뿐이며, 모두 앱 데이터 디렉토리 **`~/.selectai/`** (0700) 아래에 둔다. ADB 측 상태(프로파일, 대화, 코멘트)는 전부 DB가 소유한다.
-- OCI GenAI 호출 경로(인증·컴파트먼트·리전)는 프로파일 속성으로 결정되며, 기본값은 `provider=oci`, `model=meta.llama-3.3-70b-instruct`, `region=us-chicago-1`, `oci_compartment_id=ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq` (TAEWAN.KIM).
+- OCI GenAI 호출 경로(인증·컴파트먼트·리전)는 프로파일 속성으로 결정되며, 기본값은 `provider=oci`, `model=meta.llama-3.3-70b-instruct`, `region=us-chicago-1`, `oci_compartment_id=ocid1.compartment.oc1..<your-compartment-ocid>` (TAEWAN.KIM).
 
 ---
 
@@ -457,7 +457,7 @@ flowchart TB
 | `DB_POOL_MAX` | `4` | 커넥션당 풀 최대 세션 |
 | `DB_CALL_TIMEOUT_MS` | `15000` | 일반 쿼리 call_timeout |
 | `SELECTAI_CALL_TIMEOUT_MS` | `120000` | GENERATE 계열 call_timeout 상한(runsql/explainsql/narrate/chat 기준 120s). showsql/showprompt·권한 점검 등 단계별 세분값은 api-spec §12.2 표를 따르며 이 상한을 넘지 않는다 |
-| `DEFAULT_OCI_COMPARTMENT_ID` | TAEWAN.KIM OCID (`ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq`) | 프로파일 `oci_compartment_id` 기본값 |
+| `DEFAULT_OCI_COMPARTMENT_ID` | TAEWAN.KIM OCID (`ocid1.compartment.oc1..<your-compartment-ocid>`) | 프로파일 `oci_compartment_id` 기본값 |
 | `DEFAULT_OCI_REGION` | `us-chicago-1` | 프로파일 `region` 기본값 |
 | `DEFAULT_MODEL` | `meta.llama-3.3-70b-instruct` | 프로파일 `model` 기본값 |
 | `CONVERSATION_RETENTION_DAYS` | `7` | 새 대화 기본 보관일 |

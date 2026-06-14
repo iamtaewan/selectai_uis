@@ -256,7 +256,7 @@ Select AI Demo Studio는 wallet zip 업로드부터 권한 점검, 프로파일 
 | DB 연결 | mTLS wallet zip 업로드 |
 | AI 공급자 기본값 | OCI Generative AI (기본 모델 `meta.llama-3.3-70b-instruct`) |
 | 호출 패턴 (필수) | stateless 원칙 — `SELECT AI` 키워드·`SET_PROFILE`·`SET_CONVERSATION_ID` 대신 `DBMS_CLOUD_AI.GENERATE(prompt, profile_name, action, params)` 사용 |
-| OCI 컴파트먼트 | `TAEWAN.KIM` / `ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq` — 모든 OCI 리소스 및 프로파일 `oci_compartment_id` 기본값 |
+| OCI 컴파트먼트 | `TAEWAN.KIM` / `ocid1.compartment.oc1..<your-compartment-ocid>` — 모든 OCI 리소스 및 프로파일 `oci_compartment_id` 기본값 |
 | 배포 | 로컬 개발 → OCI Compute 배포 |
 | 기술 근거 | 모든 Select AI API/속성/권한은 `docs/research/selectai-reference.md`만을 근거로 구현 (추측 금지) |
 

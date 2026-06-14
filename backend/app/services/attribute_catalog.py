@@ -10,15 +10,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.config import TAEWAN_KIM_COMPARTMENT_OCID
+from app.config import get_settings
 
-# api-spec §4.1 defaults — 모든 OCI 작업은 TAEWAN.KIM 컴파트먼트 (CLAUDE.md 전역 규칙)
+# 컴파트먼트 OCID는 환경변수(DEFAULT_OCI_COMPARTMENT_ID)에서 주입 — 코드 하드코딩 금지.
+_DEFAULT_COMPARTMENT_ID = get_settings().default_oci_compartment_id
+
+# api-spec §4.1 defaults
 DEFAULTS: dict[str, str] = {
     "provider": "oci",
     "credential_name": "OCI$RESOURCE_PRINCIPAL",
     "model": "meta.llama-3.3-70b-instruct",
     "region": "us-chicago-1",
-    "oci_compartment_id": TAEWAN_KIM_COMPARTMENT_OCID,
+    "oci_compartment_id": _DEFAULT_COMPARTMENT_ID,
 }
 
 # OCI GenAI Chat 모델 — us-chicago-1 ACTIVE/CHAT 모델 목록(2026-06 OCI CLI 기준).
@@ -221,7 +224,7 @@ VERIFIED_ATTRIBUTES: list[dict[str, Any]] = [
     {
         "name": "oci_compartment_id",
         "type": "text",
-        "default": TAEWAN_KIM_COMPARTMENT_OCID,
+        "default": _DEFAULT_COMPARTMENT_ID,
         "required": False,
         "description_ko": "OCI Generative AI를 호출할 컴파트먼트 OCID.",
         "docs_ref": "p85",

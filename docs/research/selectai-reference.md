@@ -303,7 +303,7 @@ BEGIN
                         {"owner": "SH", "name": "products"}],
         "model": "meta.llama-3.3-70b-instruct",
         "region": "us-chicago-1",
-        "oci_compartment_id": "ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq",
+        "oci_compartment_id": "ocid1.compartment.oc1..<your-compartment-ocid>",
         "conversation": "true",
         "comments": "true"
        }');

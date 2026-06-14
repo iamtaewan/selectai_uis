@@ -11,6 +11,8 @@ services:
       # 여러 환경에서 동일 키를 쓰려면 값을 명시하세요(Fernet 32B urlsafe base64).
       # APP_SECRET_KEY: "여기에-고정-키"
       APP_DATA_DIR: /data
+      # 프로파일 oci_compartment_id 기본값 — 본인 컴파트먼트 OCID로 설정(미설정 시 화면에서 직접 입력)
+      # DEFAULT_OCI_COMPARTMENT_ID: "ocid1.compartment.oc1..<your-compartment-ocid>"
     volumes:
       # 커넥션·wallet·설정·secret.key 영속 (재시작에도 유지) — 필수
       - selectai-data:/data

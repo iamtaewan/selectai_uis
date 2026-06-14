@@ -10,12 +10,6 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# TAEWAN.KIM 컴파트먼트 (CLAUDE.md 전역 규칙 — 모든 OCI 작업의 기본 컴파트먼트)
-TAEWAN_KIM_COMPARTMENT_OCID = (
-    "ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq"
-)
-
-
 class Settings(BaseSettings):
     """환경변수 설정 (deploy/.env.example과 1:1)."""
 
@@ -35,7 +29,8 @@ class Settings(BaseSettings):
     selectai_call_timeout_ms: int = 120_000      # GENERATE 계열 call_timeout 상한
 
     # 프로파일 기본값 (api-spec §4.1 defaults)
-    default_oci_compartment_id: str = TAEWAN_KIM_COMPARTMENT_OCID
+    # 컴파트먼트 OCID는 환경변수 DEFAULT_OCI_COMPARTMENT_ID(또는 .env)로 주입 — 코드 하드코딩 금지.
+    default_oci_compartment_id: str = ""
     default_oci_region: str = "us-chicago-1"
     default_model: str = "meta.llama-3.3-70b-instruct"
 

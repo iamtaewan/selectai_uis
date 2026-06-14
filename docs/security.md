@@ -165,7 +165,7 @@ cursor.execute(
 ### 5.2 OCI Compute 배포 시
 
 - **HTTPS 필수**: reverse proxy(nginx/caddy) 뒤에 FastAPI를 두고 TLS 종단. 앱 포트(8000 등)는 localhost에만 바인딩하고 proxy만 노출 (배포 형태 상세는 오픈 이슈 O5 — 단 "HTTP 평문으로 admin 비밀번호 전송 금지"는 불변 조건).
-- **OCI Security List / NSG 최소 개방**: 인바운드는 443(HTTPS)과 관리용 22(SSH, 가급적 운영자 IP CIDR 한정)만. 그 외 전부 차단. 모든 네트워크 리소스는 `TAEWAN.KIM` 컴파트먼트(`ocid1.compartment.oc1..aaaaaaaaihv5qjkvzwovuc6bwm32ikrjjtz3syuevn47b44ssikueho2umxq`) 내에 생성한다.
+- **OCI Security List / NSG 최소 개방**: 인바운드는 443(HTTPS)과 관리용 22(SSH, 가급적 운영자 IP CIDR 한정)만. 그 외 전부 차단. 모든 네트워크 리소스는 `TAEWAN.KIM` 컴파트먼트(`ocid1.compartment.oc1..<your-compartment-ocid>`) 내에 생성한다.
 - **인터넷 전면 공개 금지 권고**: 인증 체계가 없는 단일 시연자 도구이므로, 공개가 불가피하면 최소한 reverse proxy Basic Auth 또는 소스 IP 제한을 적용한다 (앱 자체 인증 기본값은 오픈 이슈 O1과 함께 architecture.md에서 확정).
 - Resource Principal 사용 시(레퍼런스 §4.4) Dynamic Group 정책은 `manage generative-ai-family`를 **테넌시 전체가 아닌 컴파트먼트 한정**으로 작성한다:
 
