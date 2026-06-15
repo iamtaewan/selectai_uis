@@ -949,3 +949,63 @@ ORA-20046: Missing value for profile attribute - enforce_object_list
   (voice/tts 모델 제외). DEPRECATED에 meta.llama-3-70b-instruct 추가.
 - model 속성은 enum_or_text라 목록 외 직접 입력도 가능.
 - 검증: 구문 OK, attribute-meta 엔드포인트 enum 39개·첫 항목 xai.grok-4.3 노출 확인.
+
+---
+
+## 프롬프트 58 — o-home-shopping 데이터 적재 기능 (버킷 CSV) + 스키마 복제 페이지
+
+```
+(o-home-shopping demo의 DDL/loader/CSV 분석) 데이터 적재 기능을 구현하고 스키마 복제 페이지
+SH 복제 아래에 추가. 큰 CSV는 TAEWAN.KIM에 o-home-shopping-data 공개 버킷(시카고) 생성해 이용.
+```
+
+### 처리
+- OCI: us-chicago-1 TAEWAN.KIM에 공개 버킷 `o-home-shopping-data`(ObjectRead) 생성, CSV 47개(358MB) 업로드.
+  공개 URL: objectstorage.us-chicago-1.oraclecloud.com/n/apackrsct01/b/o-home-shopping-data/o
+- 백엔드: DDL(635줄)·manifest(47) 번들. `ohome_service`(check/setup_ddl/load_table) — CSV는 버킷
+  공개 URL에서 다운로드(또는 OHOME_DATA_DIR 로컬 우선), 헤더→대문자 컬럼 매핑, 빈값→NULL,
+  NLS 날짜/시각 세션 설정, executemany 1만 배치. 라우터 `/ohome/{check,ddl,load-table}` 등록.
+- 프론트: SchemaClone 페이지 SH 복제 아래 '④ 소스 점검 / ⑤ 적재 실행 / ⑥ 적재 로그' 섹션.
+  DDL 후 테이블별 순차 load-table 호출하며 진행률·행수 라이브 로그.
+- 검증: 버킷 공개 URL 200, 서비스 E2E(DDL 47/47, broadcast 7600행 등 적재 성공), tsc/build 통과.
+
+---
+
+## 프롬프트 59 — 프로파일 스코프(SH/OHV2) 기반 예제 쿼리 제안·적용
+
+```
+플레이그라운드/챗봇/피드백 현재 프로파일이 sh, ohv2를 담는지 확인하고, 포함 여부에 따라
+한글 자연어 쿼리(단순/복잡/분석 각 2개)를 제안 적용. 둘 다 포함하면 모두, 없으면 제외. 구현 가능?
+```
+
+### 분석 결과
+- 기본 프로파일 GENAI_ADMIN object_list = ADMIN의 SH 복제 8테이블 → SH 포함, OHV2 미포함.
+- → profile-aware로 구현(가능). SH만 노출, 프로파일이 OHV2 테이블 포함 시 OHV2 예제도 노출.
+
+### 처리
+- 백엔드 `suggested_prompts_for(connection, profile)`: 프로파일 object_list 분석
+  (named: SH 표준테이블/OHV2_ 접두, owner-only: DB로 OHV2/SH 존재 확인, 빈 목록: 광범위→DB 존재).
+  SH_EXAMPLE_PROMPTS·OHV2_EXAMPLE_PROMPTS(각 단순/복잡/분석×2) 선별 반환. 라우터 profile_name 파라미터화.
+- 프론트 공용 컴포넌트 `SuggestedPrompts`(데이터셋·난이도별 칩) → Playground/Chat/Feedback 적용,
+  각 페이지의 effective 프로파일로 호출.
+- 검증: GENAI_ADMIN→SH 6개, SH+OHV2 임시 프로파일→12개(SH6+OHV2 6) 정상, tsc/build 통과.
+
+---
+
+## 프롬프트 60 — o-home 적재 속도 개선 + 비동기화
+
+```
+데이터 적재 속도 개선 방법은 없을까요? 추가로 비동기로 동작하게 하고 속도를 개선할 수 있나요?
+```
+
+### 분석·검증
+- 데이터가 OCI 공개 버킷에 있으므로 ADB가 직접 읽는 DBMS_CLOUD.COPY_DATA가 최선(서버측 병렬 직접경로).
+  검증: COPY_DATA로 CUSTOMER 5만행 1.0s, BROADCAST 7600행 1.3s.
+- DDL에 FK 50개 존재 → 병렬 적재 위해 FK 일시 비활성→병렬→재활성(NOVALIDATE).
+
+### 처리
+- 백엔드: load_table을 COPY_DATA 우선(로컬 OHOME_DATA_DIR 지정 시 executemany 폴백)으로 전환.
+  비동기 작업: `start_load_all`(백그라운드 asyncio) — DDL→FK off→Semaphore(4) 병렬 COPY_DATA→FK on,
+  인메모리 진행상태. 라우터 `/ohome/load-all`(시작)·`/ohome/load-status`(폴링) 추가.
+- 프론트: '적재 시작'을 load-all+폴링(1.5s)으로 변경 — 비동기, 단계/진행/행수 라이브 표시.
+- E2E: 비동기 병렬 전체 적재 47/47, 4,325,626행, 실패0, 약 150초. tsc/build 통과.

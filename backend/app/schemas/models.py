@@ -307,6 +307,16 @@ class CloneRequest(BaseModel):
     overwrite: bool = True
 
 
+class OhomeDdlRequest(BaseModel):
+    """o-home-shopping DDL 생성 — overwrite=True면 기존 OHV2 테이블 DROP 후 생성."""
+    overwrite: bool = True
+
+
+class OhomeLoadRequest(BaseModel):
+    """o-home-shopping 테이블 1개 CSV 적재 요청."""
+    table: str
+
+
 class FeedbackRequest(BaseModel):
     profile_name: str
     sql_id: Optional[str] = None            # V$MAPPED_SQL 조회 값

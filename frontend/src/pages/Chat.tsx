@@ -21,9 +21,11 @@ import type {
   DefaultProfileSetting,
   GenerateResult,
   ProfileSummary,
+  SuggestedPromptsResult,
 } from "../api/types";
 import Button from "../components/Button";
 import ComparePanes from "../components/ComparePanes";
+import SuggestedPrompts from "../components/SuggestedPrompts";
 import Panel from "../components/Panel";
 import ResultGrid from "../components/ResultGrid";
 import SqlBlock from "../components/SqlBlock";
@@ -33,13 +35,6 @@ import StatusBadge from "../components/StatusBadge";
 const TURN_ACTIONS: ConversationAction[] = ["narrate", "chat", "runsql", "showsql", "explainsql"];
 
 /** 추천 후속 질문 — 레퍼런스 §9 대화형 시나리오 순서 (total → by country → age group → top 5) */
-const FOLLOWUP_CHIPS = [
-  "what are the total number of customers",
-  "break out count of customers by country",
-  "break out count of customers by age group",
-  "what are the top 5 customers with rank",
-];
-
 /** SQL 투명 모드 preference (PG-08 X4 — localStorage, 키 이름은 합리적 가정) */
 function isSqlTransparent(): boolean {
   return localStorage.getItem("selectai.sqlTransparent") !== "off";
@@ -252,6 +247,19 @@ export function Chat() {
   const defaultProfileQuery = useQuery({
     queryKey: ["settings", "default-profile"],
     queryFn: () => getEnvelope<DefaultProfileSetting>("/settings/default-profile"),
+  });
+  // 추천 질문 — 프로파일 스코프(SH/OHV2) 기반
+  const promptProfile = selectedProfile || defaultProfileQuery.data?.data.profile_name || "";
+  const suggestedQuery = useQuery({
+    queryKey: ["selectai", "suggested-prompts", promptProfile],
+    queryFn: () =>
+      getEnvelope<SuggestedPromptsResult>(
+        `/selectai/suggested-prompts${
+          promptProfile ? `?profile_name=${encodeURIComponent(promptProfile)}` : ""
+        }`,
+        undefined,
+        { suppressErrorToast: true },
+      ),
   });
 
   // 선택 대화의 턴 이력 (USER_CLOUD_AI_CONVERSATION_PROMPTS)
@@ -470,19 +478,10 @@ export function Chat() {
           ))}
         </div>
 
-        {/* 추천 후속 질문 칩 + 입력 */}
+        {/* 추천 질문(프로파일 스코프) + 입력 */}
         <div className="border-t border-[var(--color-neutral-30)] p-4">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="text-xs text-[var(--color-neutral-60)]">추천 후속 질문:</span>
-            {FOLLOWUP_CHIPS.map((chip) => (
-              <button
-                key={chip}
-                className="rounded-full border border-[var(--color-neutral-40)] bg-[var(--color-neutral-10)] px-3 py-1 text-sm hover:bg-[var(--color-neutral-20)]"
-                onClick={() => setInput(chip)}
-              >
-                {chip}
-              </button>
-            ))}
+          <div className="mb-2">
+            <SuggestedPrompts result={suggestedQuery.data?.data} onPick={(p) => setInput(p)} />
           </div>
           <div className="flex gap-2">
             <input

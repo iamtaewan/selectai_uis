@@ -34,6 +34,15 @@ class Settings(BaseSettings):
     default_oci_region: str = "us-chicago-1"
     default_model: str = "meta.llama-3.3-70b-instruct"
 
+    # o-home-shopping CSV 소스.
+    # 기본: OCI Object Storage 공개 버킷(TAEWAN.KIM, us-chicago-1)에서 다운로드.
+    # OHOME_DATA_DIR을 지정하면 해당 로컬 경로의 파일을 우선 사용(오프라인/개발용).
+    ohome_bucket_base_url: str = (
+        "https://objectstorage.us-chicago-1.oraclecloud.com"
+        "/n/apackrsct01/b/o-home-shopping-data/o"
+    )
+    ohome_data_dir: str = ""
+
     # 대화 기본 보관일 (오픈 이슈 O4)
     conversation_retention_days: int = 7
 
@@ -41,6 +50,7 @@ class Settings(BaseSettings):
     def data_dir(self) -> Path:
         """~ 확장된 앱 데이터 디렉토리 경로."""
         return self.app_data_dir.expanduser()
+
 
 
 @lru_cache

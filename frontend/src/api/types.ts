@@ -291,7 +291,18 @@ export interface ActionMeta {
 export interface SuggestedPrompt {
   prompt: string;
   recommended_action: SelectAIAction;
-  schema: string;
+  schema?: string;
+  /** 데이터셋 — SH | OHV2 (프로파일 스코프 기반) */
+  dataset?: "SH" | "OHV2";
+  /** 난이도 분류 — 단순 | 복잡 | 분석 */
+  category?: "단순" | "복잡" | "분석";
+}
+
+/** 프로파일 스코프 기반 추천 프롬프트 응답 */
+export interface SuggestedPromptsResult {
+  sh: boolean;
+  ohv2: boolean;
+  prompts: SuggestedPrompt[];
 }
 
 // ---------------------------------------------------------------- chat

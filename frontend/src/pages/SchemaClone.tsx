@@ -47,10 +47,82 @@ interface CloneResult {
 
 const STATUS_MARK: Record<CloneStep["status"], string> = { ok: "✓", skip: "·", error: "✗" };
 
+// ---- o-home-shopping 데이터 적재 ----
+interface OhomeCheck {
+  current_user: string;
+  source: "bucket" | "local";
+  source_url: string;
+  source_reachable: boolean;
+  table_count: number;
+  tables: { table: string; csv: string }[];
+}
+interface OhomeLogLine {
+  status: "ok" | "error" | "info";
+  text: string;
+}
+interface OhomeStatus {
+  running: boolean;
+  finished: boolean;
+  phase: string;
+  total: number;
+  done: number;
+  rows: number;
+  ok: number;
+  failed: number;
+  steps: { status: "ok" | "error" | "info"; text: string }[];
+}
+
 export function SchemaClone() {
   const activeConnection = useConnectionStore((s) => s.activeConnection);
   const activeConnectionId = useConnectionStore((s) => s.activeConnectionId);
   const [overwrite, setOverwrite] = useState(true);
+
+  // o-home-shopping 적재 상태
+  const [ohomeOverwrite, setOhomeOverwrite] = useState(true);
+  const [ohomeRunning, setOhomeRunning] = useState(false);
+  const [ohomeLog, setOhomeLog] = useState<OhomeLogLine[]>([]);
+  const [ohomeProgress, setOhomeProgress] = useState<{ done: number; total: number; rows: number }>({
+    done: 0,
+    total: 0,
+    rows: 0,
+  });
+
+  const ohomeCheckQuery = useQuery({
+    queryKey: ["ohome", "check", activeConnectionId],
+    enabled: !!activeConnectionId,
+    queryFn: async () =>
+      (await getEnvelope<OhomeCheck>("/ohome/check", undefined, { suppressErrorToast: true })).data,
+  });
+  const ohome = ohomeCheckQuery.data;
+
+  // 비동기 적재 — load-all 시작 후 load-status 폴링 (DBMS_CLOUD.COPY_DATA 병렬, 백그라운드)
+  const runOhomeLoad = async () => {
+    if (!ohome || ohomeRunning) return;
+    setOhomeRunning(true);
+    setOhomeLog([{ status: "info", text: `적재 작업 시작 (overwrite=${ohomeOverwrite})…` }]);
+    setOhomeProgress({ done: 0, total: ohome.table_count, rows: 0 });
+    try {
+      await postEnvelope("/ohome/load-all", { overwrite: ohomeOverwrite }, { sqlLogTag: "PG-ohome/load-all" });
+      // 폴링
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const st = (await getEnvelope<OhomeStatus>("/ohome/load-status", undefined, { suppressErrorToast: true })).data;
+        setOhomeProgress({ done: st.done, total: st.total || ohome.table_count, rows: st.rows });
+        // 서버 단계 로그를 그대로 반영
+        setOhomeLog([
+          { status: "info", text: `[${st.phase}] ${st.done}/${st.total} · ${st.rows.toLocaleString()}행 · 성공 ${st.ok} / 실패 ${st.failed}` },
+          ...st.steps.map((s) => ({ status: s.status, text: `  ${s.text}` })),
+        ]);
+        if (st.finished) break;
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      appendLog({ status: "error", text: `적재 시작 실패 — ${msg}` });
+    } finally {
+      setOhomeRunning(false);
+    }
+  };
+  const appendLog = (line: OhomeLogLine) => setOhomeLog((prev) => [...prev, line]);
 
   const checkQuery = useQuery({
     queryKey: ["clone", "sh", "check", activeConnectionId],
@@ -215,6 +287,97 @@ export function SchemaClone() {
                 {s.sql ? (
                   <code className="pl-5 text-[var(--color-code-keyword)]">{s.sql}</code>
                 ) : null}
+              </li>
+            ))}
+          </ol>
+        </Panel>
+      ) : null}
+
+      {/* ===== o-home-shopping 데이터 적재 (SH 복제 아래) ===== */}
+      <div className="mt-2 border-t border-[var(--color-neutral-30)] pt-5">
+        <h2 className="text-2xl font-bold">o-home-shopping 데이터 적재</h2>
+        <p className="mt-1 text-sm text-[var(--color-neutral-60)]">
+          홈쇼핑 데모 데이터셋(<b>OHV2_*</b> 47개 테이블, 약 200만 행)을 현재 접속 사용자 스키마에
+          적재합니다. CSV는 OCI Object Storage 공개 버킷(시카고)에서 내려받습니다.
+        </p>
+      </div>
+
+      <Panel title="④ 데이터 소스 점검">
+        {ohomeCheckQuery.isFetching && !ohome ? (
+          <p className="text-sm text-[var(--color-running)]">점검 중…</p>
+        ) : ohome ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={ohome.source_reachable ? "success" : "error"}>
+                {ohome.source_reachable ? "소스 접근 가능" : "소스 접근 불가"}
+              </StatusBadge>
+              <span className="text-sm text-[var(--color-neutral-70)]">
+                접속 사용자 <b>{ohome.current_user}</b> · 소스 <b>{ohome.source}</b> · 테이블{" "}
+                {ohome.table_count}개
+              </span>
+            </div>
+            <p className="break-all font-mono text-xs text-[var(--color-neutral-60)]">
+              {ohome.source_url}
+            </p>
+            {!ohome.source_reachable ? (
+              <p className="rounded-[var(--radius-md)] bg-[var(--color-warning-tint)] p-2 text-xs text-[var(--color-warning)]">
+                CSV 소스에 접근할 수 없어 적재가 비활성화됩니다. 버킷 공개 설정 또는 네트워크를
+                확인하세요.
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--color-danger)]">점검 결과를 불러오지 못했습니다.</p>
+        )}
+      </Panel>
+
+      <Panel title="⑤ 적재 실행">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={ohomeOverwrite}
+              onChange={(e) => setOhomeOverwrite(e.target.checked)}
+              disabled={ohomeRunning}
+            />
+            기존 OHV2 테이블 덮어쓰기 (DROP 후 재생성)
+          </label>
+          <Button
+            loading={ohomeRunning}
+            disabled={!ohome?.source_reachable}
+            onClick={() => runOhomeLoad()}
+          >
+            DDL 생성 + 적재 시작
+          </Button>
+          {ohomeProgress.total > 0 ? (
+            <span className="text-sm text-[var(--color-neutral-70)]">
+              진행 {ohomeProgress.done}/{ohomeProgress.total} · {ohomeProgress.rows.toLocaleString()}행
+            </span>
+          ) : null}
+        </div>
+        {ohomeRunning ? (
+          <p className="mt-2 text-sm text-[var(--color-running)]">
+            적재 중… 대용량 테이블(order/order_line/shipment)은 수십 초~수 분 소요됩니다.
+          </p>
+        ) : null}
+      </Panel>
+
+      {ohomeLog.length > 0 ? (
+        <Panel title="⑥ 적재 로그">
+          <ol className="flex flex-col gap-0.5 rounded-[var(--radius-lg)] bg-[var(--color-code-bg)] p-3 font-mono text-xs">
+            {ohomeLog.map((l, i) => (
+              <li
+                key={i}
+                style={{
+                  color:
+                    l.status === "error"
+                      ? "var(--color-danger)"
+                      : l.status === "info"
+                        ? "var(--color-code-comment)"
+                        : "var(--color-code-string)",
+                }}
+              >
+                {l.text}
               </li>
             ))}
           </ol>

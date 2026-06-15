@@ -121,6 +121,104 @@ SUGGESTED_PROMPTS: list[dict[str, str]] = [
     {"prompt": "총 시청 횟수는 얼마인가요?", "recommended_action": "showsql", "schema": "ADMIN"},
 ]
 
+# ---------------------------------------------------------------- 데이터셋별 예제 쿼리 (한국어)
+# 프로파일 스코프가 SH/OHV2를 포함하는지에 따라 노출. category: 단순/복잡/분석, 각 2개.
+SH_EXAMPLE_PROMPTS: list[dict[str, str]] = [
+    {"category": "단순", "prompt": "전체 고객은 몇 명인가요?", "recommended_action": "runsql"},
+    {"category": "단순", "prompt": "제품 카테고리 목록을 보여주세요", "recommended_action": "runsql"},
+    {"category": "복잡", "prompt": "국가별 고객 수를 많은 순으로 보여주세요", "recommended_action": "runsql"},
+    {"category": "복잡", "prompt": "채널별 총 판매액과 평균 판매액을 구해주세요", "recommended_action": "runsql"},
+    {"category": "분석", "prompt": "연도별 매출 추이를 집계해 분석해주세요", "recommended_action": "narrate"},
+    {"category": "분석", "prompt": "가장 많이 팔린 제품 상위 5개를 매출과 함께 분석해주세요", "recommended_action": "narrate"},
+]
+OHV2_EXAMPLE_PROMPTS: list[dict[str, str]] = [
+    {"category": "단순", "prompt": "방송 채널 목록을 보여주세요", "recommended_action": "runsql"},
+    {"category": "단순", "prompt": "상품 카테고리별 상품 수를 알려주세요", "recommended_action": "runsql"},
+    {"category": "복잡", "prompt": "순매출이 가장 높은 방송 상위 10개를 보여주세요", "recommended_action": "runsql"},
+    {"category": "복잡", "prompt": "지역별 주문 건수와 평균 주문 금액을 구해주세요", "recommended_action": "runsql"},
+    {"category": "분석", "prompt": "월별 순매출 추이와 증감을 분석해주세요", "recommended_action": "narrate"},
+    {"category": "분석", "prompt": "호스트별 판매 실적과 반품률을 분석해 우수 호스트를 알려주세요", "recommended_action": "narrate"},
+]
+
+# SH(또는 SH를 복제한 스키마)를 식별하는 표준 테이블명
+_SH_CANONICAL = {
+    "CUSTOMERS", "SALES", "PRODUCTS", "COUNTRIES", "CHANNELS",
+    "COSTS", "PROMOTIONS", "TIMES", "SUPPLEMENTARY_DEMOGRAPHICS",
+}
+
+
+async def suggested_prompts_for(
+    connection_id: str, profile_name: str | None, recorder: oracle.SqlRecorder
+) -> dict[str, Any]:
+    """활성 프로파일의 object_list 스코프를 분석해 SH/OHV2 예제 쿼리를 선별 반환.
+
+    프로파일이 SH 데이터셋을 포함하면 SH 예제, OHV2_* 테이블을 포함하면 OHV2 예제를 추가한다.
+    둘 다 없으면 빈 목록(예제 없음).
+    """
+    resolved = await resolve_profile(connection_id, profile_name)
+    async with pool_registry.acquire(
+        connection_id, pool_registry.CALL_TIMEOUT_PRIVILEGE_MS
+    ) as conn:
+        raw = await oracle.fetch_value(
+            conn,
+            "SELECT attribute_value FROM user_cloud_ai_profile_attributes "
+            "WHERE profile_name = :p AND attribute_name = 'object_list'",
+            {"p": resolved.upper()},
+            recorder=recorder,
+        )
+        object_list: list[dict[str, Any]] = []
+        if raw:
+            try:
+                object_list = json.loads(raw if isinstance(raw, str) else str(raw))
+            except (json.JSONDecodeError, TypeError):
+                object_list = []
+
+        sh = ohv2 = False
+        owner_only: list[str] = []
+        for entry in object_list:
+            name = str(entry.get("name") or "").upper()
+            owner = str(entry.get("owner") or "").upper()
+            if name:
+                if name in _SH_CANONICAL:
+                    sh = True
+                if name.startswith("OHV2"):
+                    ohv2 = True
+            elif owner:
+                owner_only.append(owner)
+                if owner == "SH":
+                    sh = True
+
+        async def _owner_has(owner: str, like: str) -> bool:
+            cnt = await oracle.fetch_value(
+                conn,
+                "SELECT COUNT(*) FROM all_tables WHERE owner = :o AND table_name LIKE :l",
+                {"o": owner, "l": like},
+                recorder=recorder,
+            )
+            return bool(cnt and int(cnt) > 0)
+
+        # 스키마 전체(owner-only) 지정 시 해당 스키마에 OHV2/SH 테이블이 있는지 확인
+        for owner in owner_only:
+            if await _owner_has(owner, "OHV2%"):
+                ohv2 = True
+            if not sh and await _owner_has(owner, "CUSTOMERS"):
+                sh = True
+
+        # object_list가 비어 있으면 광범위 스코프 → DB 존재로 판정
+        if not object_list:
+            cur_user = str(
+                await oracle.fetch_value(conn, "SELECT USER FROM dual", recorder=recorder)
+            ).upper()
+            sh = await _owner_has("SH", "CUSTOMERS") or await _owner_has(cur_user, "CUSTOMERS")
+            ohv2 = await _owner_has(cur_user, "OHV2%")
+
+    prompts: list[dict[str, str]] = []
+    if sh:
+        prompts += [{**p, "dataset": "SH"} for p in SH_EXAMPLE_PROMPTS]
+    if ohv2:
+        prompts += [{**p, "dataset": "OHV2"} for p in OHV2_EXAMPLE_PROMPTS]
+    return {"profile_name": resolved, "sh": sh, "ohv2": ohv2, "prompts": prompts}
+
 # 텍스트 계열 액션의 result_type 매핑
 _RESULT_TYPES: dict[str, str] = {
     "runsql": "table",

@@ -63,10 +63,20 @@ async def feedback(
 
 
 @router.get("/suggested-prompts", response_model=Envelope)
-async def suggested_prompts() -> Envelope:
-    """§5.4 추천 프롬프트 (canned, SH 스키마 검증 예제) — 정적."""
+async def suggested_prompts(
+    profile_name: str | None = None,
+    x_connection_id: str | None = Header(default=None, alias="X-Connection-Id"),
+) -> Envelope:
+    """§5.4 추천 프롬프트 — 프로파일 스코프(SH/OHV2 포함 여부)에 따라 예제 쿼리 선별.
+
+    커넥션이 없으면 빈 목록(프론트가 커넥션 활성 시에만 호출).
+    """
     started = common.start_timer()
-    return common.make_envelope(selectai_service.SUGGESTED_PROMPTS, [], started)
+    if not x_connection_id:
+        return common.make_envelope({"sh": False, "ohv2": False, "prompts": []}, [], started)
+    recorder = oracle.SqlRecorder()
+    data = await selectai_service.suggested_prompts_for(x_connection_id, profile_name, recorder)
+    return common.make_envelope(data, recorder.statements, started)
 
 
 @router.get("/feedback/list", response_model=Envelope)

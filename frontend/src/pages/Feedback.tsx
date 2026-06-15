@@ -11,7 +11,8 @@ import { Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { ApiError, getEnvelope, postEnvelope } from "../api/client";
-import type { GenerateResult, ProfileSummary } from "../api/types";
+import type { GenerateResult, ProfileSummary, SuggestedPromptsResult } from "../api/types";
+import SuggestedPrompts from "../components/SuggestedPrompts";
 import Button from "../components/Button";
 import ComparePanes from "../components/ComparePanes";
 import ResultGrid from "../components/ResultGrid";
@@ -128,6 +129,20 @@ export function Feedback() {
   // 실제 사용 프로파일 — 선택값 우선, 없으면 기본 프로파일
   const defaultProfile = profiles.find((p) => p.is_default)?.profile_name ?? "";
   const effectiveProfile = profile || defaultProfile;
+
+  // 추천 질문 — 프로파일 스코프(SH/OHV2) 기반
+  const suggestedQuery = useQuery({
+    queryKey: ["selectai", "suggested-prompts", effectiveProfile],
+    enabled: !!activeConnection,
+    queryFn: () =>
+      getEnvelope<SuggestedPromptsResult>(
+        `/selectai/suggested-prompts${
+          effectiveProfile ? `?profile_name=${encodeURIComponent(effectiveProfile)}` : ""
+        }`,
+        undefined,
+        { suppressErrorToast: true },
+      ),
+  });
 
   // 저장된 피드백 조회(검증) — 프로파일의 피드백 벡터 테이블 내용을 직접 출력
   const feedbackListQuery = useQuery({
@@ -401,6 +416,7 @@ export function Feedback() {
             SQL 생성+실행
           </Button>
         </div>
+        <SuggestedPrompts result={suggestedQuery.data?.data} onPick={(p) => setQuestion(p)} />
         {genBefore.error instanceof ApiError ? (
           <p className="mt-2 text-sm text-[var(--color-danger)]">{genBefore.error.body.message_ko}</p>
         ) : null}

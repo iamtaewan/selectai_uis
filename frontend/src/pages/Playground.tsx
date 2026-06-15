@@ -20,9 +20,10 @@ import type {
   GenerateResult,
   ProfileSummary,
   SelectAIAction,
-  SuggestedPrompt,
+  SuggestedPromptsResult,
 } from "../api/types";
 import Button from "../components/Button";
+import SuggestedPrompts from "../components/SuggestedPrompts";
 import { useConnectionStore } from "../store/connectionStore";
 import Panel from "../components/Panel";
 import ResultGrid from "../components/ResultGrid";
@@ -465,11 +466,6 @@ export function Playground() {
     queryFn: () => getEnvelope<ActionMeta[]>("/selectai/actions"),
     staleTime: Infinity,
   });
-  const suggestedQuery = useQuery({
-    queryKey: ["selectai", "suggested-prompts"],
-    queryFn: () => getEnvelope<SuggestedPrompt[]>("/selectai/suggested-prompts"),
-    staleTime: Infinity,
-  });
   const profilesQuery = useQuery({
     queryKey: ["profiles"],
     // 공유 키 ["profiles"] 반환 형태를 배열로 통일. 커넥션 필요 → 활성 시에만 발사
@@ -480,6 +476,20 @@ export function Playground() {
     queryKey: ["settings", "default-profile"],
     enabled: !!activeConnectionId, // 커넥션 필요 → 활성 시에만 발사 (새로고침 race 방지)
     queryFn: () => getEnvelope<DefaultProfileSetting>("/settings/default-profile"),
+  });
+  // 추천 질문 — 활성 프로파일 스코프(SH/OHV2)에 따라 예제 선별
+  const promptProfile = selectedProfile || defaultProfileQuery.data?.data.profile_name || "";
+  const suggestedQuery = useQuery({
+    queryKey: ["selectai", "suggested-prompts", promptProfile],
+    enabled: !!activeConnectionId,
+    queryFn: () =>
+      getEnvelope<SuggestedPromptsResult>(
+        `/selectai/suggested-prompts${
+          promptProfile ? `?profile_name=${encodeURIComponent(promptProfile)}` : ""
+        }`,
+        undefined,
+        { suppressErrorToast: true },
+      ),
   });
 
   const actionMeta = useMemo(() => {
@@ -589,24 +599,15 @@ export function Playground() {
             실행 (5개 액션 동시)
           </Button>
         </div>
-        {/* 추천 질문 칩 — 클릭 = 입력 채움만, 자동 실행 안 함 (시연자가 말할 시간 확보) */}
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="text-xs text-[var(--color-neutral-60)]">추천 질문:</span>
-          {suggestedQuery.data?.data.map((suggestion) => (
-            <button
-              key={suggestion.prompt}
-              className="rounded-full border border-[var(--color-neutral-40)] bg-[var(--color-neutral-10)] px-3 py-1 text-sm hover:bg-[var(--color-neutral-20)]"
-              onClick={() => {
-                setPrompt(suggestion.prompt);
-                setActiveAction(suggestion.recommended_action);
-                promptRef.current?.focus();
-              }}
-              title={`스키마: ${suggestion.schema} / 추천 액션: ${suggestion.recommended_action}`}
-            >
-              {suggestion.prompt}
-            </button>
-          ))}
-        </div>
+        {/* 추천 질문 — 프로파일 스코프(SH/OHV2)·난이도(단순/복잡/분석)별, 클릭=입력 채움만 */}
+        <SuggestedPrompts
+          result={suggestedQuery.data?.data}
+          onPick={(p, action) => {
+            setPrompt(p);
+            setActiveAction(action);
+            promptRef.current?.focus();
+          }}
+        />
       </Panel>
 
       {/* 액션 탭 — 전환 시 질문 유지, 재실행은 명시 버튼으로 */}

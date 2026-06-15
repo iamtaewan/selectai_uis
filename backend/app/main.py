@@ -25,6 +25,7 @@ from app.routers import (
     dashboard,
     enrichment,
     meta,
+    ohome,
     privileges,
     profiles,
     resources,
@@ -113,6 +114,7 @@ app.include_router(dashboard.router, prefix=API_PREFIX)     # #39
 app.include_router(resources.router, prefix=API_PREFIX)     # #40~#42
 app.include_router(meta.router, prefix=API_PREFIX)          # 메타 강화 (comment/annotation/grok 제안)
 app.include_router(clone.router, prefix=API_PREFIX)         # SH 스키마 복제 (테이블·제약·뷰)
+app.include_router(ohome.router, prefix=API_PREFIX)         # o-home-shopping 데이터 적재 (버킷 CSV)
 
 
 # ---- 정적 SPA 서빙 (단일 컨테이너 배포) ----------------------------------------

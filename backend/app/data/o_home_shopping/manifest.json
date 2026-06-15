@@ -1,0 +1,190 @@
+[
+  {
+    "table": "OHV2_BRAND",
+    "csv": "02_data/vertices/brand.csv"
+  },
+  {
+    "table": "OHV2_BROADCAST_PRODUCT_PERFORMANCE",
+    "csv": "02_data/vertices/broadcast_product_performance.csv"
+  },
+  {
+    "table": "OHV2_BROADCAST_SLOT",
+    "csv": "02_data/vertices/broadcast_slot.csv"
+  },
+  {
+    "table": "OHV2_BROADCAST",
+    "csv": "02_data/vertices/broadcast.csv"
+  },
+  {
+    "table": "OHV2_CATEGORY",
+    "csv": "02_data/vertices/category.csv"
+  },
+  {
+    "table": "OHV2_CHANNEL",
+    "csv": "02_data/vertices/channel.csv"
+  },
+  {
+    "table": "OHV2_CUSTOMER_SEGMENT",
+    "csv": "02_data/vertices/customer_segment.csv"
+  },
+  {
+    "table": "OHV2_CUSTOMER",
+    "csv": "02_data/vertices/customer.csv"
+  },
+  {
+    "table": "OHV2_EVENT_CALENDAR",
+    "csv": "02_data/vertices/event_calendar.csv"
+  },
+  {
+    "table": "OHV2_HOST",
+    "csv": "02_data/vertices/host.csv"
+  },
+  {
+    "table": "OHV2_INVENTORY_SNAPSHOT",
+    "csv": "02_data/vertices/inventory_snapshot.csv"
+  },
+  {
+    "table": "OHV2_ORDER_LINE",
+    "csv": "02_data/vertices/order_line.csv"
+  },
+  {
+    "table": "OHV2_ORDER_TXN",
+    "csv": "02_data/vertices/order.csv"
+  },
+  {
+    "table": "OHV2_PRODUCT",
+    "csv": "02_data/vertices/product.csv"
+  },
+  {
+    "table": "OHV2_PROGRAM",
+    "csv": "02_data/vertices/program.csv"
+  },
+  {
+    "table": "OHV2_PROMOTION",
+    "csv": "02_data/vertices/promotion.csv"
+  },
+  {
+    "table": "OHV2_REGION",
+    "csv": "02_data/vertices/region.csv"
+  },
+  {
+    "table": "OHV2_RETURN_EXCHANGE",
+    "csv": "02_data/vertices/return_exchange.csv"
+  },
+  {
+    "table": "OHV2_SEASON_CALENDAR",
+    "csv": "02_data/vertices/season_calendar.csv"
+  },
+  {
+    "table": "OHV2_SHIPMENT",
+    "csv": "02_data/vertices/shipment.csv"
+  },
+  {
+    "table": "OHV2_SKU",
+    "csv": "02_data/vertices/sku.csv"
+  },
+  {
+    "table": "OHV2_TIME_BUCKET",
+    "csv": "02_data/vertices/time_bucket.csv"
+  },
+  {
+    "table": "OHV2_BROADCAST_FEATURES_PRODUCT",
+    "csv": "02_data/edges/broadcast_features_product.csv"
+  },
+  {
+    "table": "OHV2_BROADCAST_IN_TIME_BUCKET",
+    "csv": "02_data/edges/broadcast_in_time_bucket.csv"
+  },
+  {
+    "table": "OHV2_BROADCAST_ON_CHANNEL",
+    "csv": "02_data/edges/broadcast_on_channel.csv"
+  },
+  {
+    "table": "OHV2_BROADCAST_TARGETS_CATEGORY",
+    "csv": "02_data/edges/broadcast_targets_category.csv"
+  },
+  {
+    "table": "OHV2_BROADCAST_TRIGGERED_EMERGENCY_BROADCAST",
+    "csv": "02_data/edges/broadcast_triggered_emergency_broadcast.csv"
+  },
+  {
+    "table": "OHV2_BROADCAST_USES_PROGRAM",
+    "csv": "02_data/edges/broadcast_uses_program.csv"
+  },
+  {
+    "table": "OHV2_CUSTOMER_BELONGS_TO_SEGMENT",
+    "csv": "02_data/edges/customer_belongs_to_segment.csv"
+  },
+  {
+    "table": "OHV2_CUSTOMER_IN_REGION",
+    "csv": "02_data/edges/customer_in_region.csv"
+  },
+  {
+    "table": "OHV2_CUSTOMER_PLACED_ORDER",
+    "csv": "02_data/edges/customer_placed_order.csv"
+  },
+  {
+    "table": "OHV2_EVENT_IMPACTED_BROADCAST",
+    "csv": "02_data/edges/event_impacted_broadcast.csv"
+  },
+  {
+    "table": "OHV2_EVENT_IMPACTED_CATEGORY",
+    "csv": "02_data/edges/event_impacted_category.csv"
+  },
+  {
+    "table": "OHV2_HOST_APPEARED_IN_BROADCAST",
+    "csv": "02_data/edges/host_appeared_in_broadcast.csv"
+  },
+  {
+    "table": "OHV2_HOST_SPECIALIZED_IN_CATEGORY",
+    "csv": "02_data/edges/host_specialized_in_category.csv"
+  },
+  {
+    "table": "OHV2_LINE_FOR_PRODUCT",
+    "csv": "02_data/edges/line_for_product.csv"
+  },
+  {
+    "table": "OHV2_LINE_FOR_SKU",
+    "csv": "02_data/edges/line_for_sku.csv"
+  },
+  {
+    "table": "OHV2_ORDER_FROM_BROADCAST",
+    "csv": "02_data/edges/order_from_broadcast.csv"
+  },
+  {
+    "table": "OHV2_ORDER_HAS_LINE",
+    "csv": "02_data/edges/order_has_line.csv"
+  },
+  {
+    "table": "OHV2_ORDER_HAS_RETURN",
+    "csv": "02_data/edges/order_has_return.csv"
+  },
+  {
+    "table": "OHV2_ORDER_HAS_SHIPMENT",
+    "csv": "02_data/edges/order_has_shipment.csv"
+  },
+  {
+    "table": "OHV2_PRODUCT_HAS_SKU",
+    "csv": "02_data/edges/product_has_sku.csv"
+  },
+  {
+    "table": "OHV2_PRODUCT_IN_CATEGORY",
+    "csv": "02_data/edges/product_in_category.csv"
+  },
+  {
+    "table": "OHV2_PRODUCT_OF_BRAND",
+    "csv": "02_data/edges/product_of_brand.csv"
+  },
+  {
+    "table": "OHV2_PROMOTION_APPLIED_TO_BROADCAST",
+    "csv": "02_data/edges/promotion_applied_to_broadcast.csv"
+  },
+  {
+    "table": "OHV2_PROMOTION_APPLIED_TO_ORDER",
+    "csv": "02_data/edges/promotion_applied_to_order.csv"
+  },
+  {
+    "table": "OHV2_SEASON_IMPACTED_CATEGORY",
+    "csv": "02_data/edges/season_impacted_category.csv"
+  }
+]
